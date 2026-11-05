@@ -1,0 +1,3 @@
+SYNTHETIC TEST DOCUMENT ONLY. NOT A CONTRACT.
+Demo account UC-002. Amount: RUB 9800.00. Payment date: 2026-11-15.
+Simulated signature evidence for browser QA. No real resident or obligation.

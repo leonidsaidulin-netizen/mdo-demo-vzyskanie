@@ -1,0 +1,13 @@
+import {build} from 'esbuild';
+import {readFile,writeFile,readdir,unlink} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const result=await build({entryPoints:['dist/app.mjs'],bundle:true,format:'esm',write:false,target:'es2022'});
+const bytes=result.outputFiles[0].contents;
+const file=`app-${createHash('sha256').update(bytes).digest('hex').slice(0,12)}.mjs`;
+const html=await readFile('dist/index.html','utf8');
+const cssHash=createHash('sha256').update(await readFile('dist/style.css')).digest('hex').slice(0,12);
+if(!/src="app(?:-[a-f0-9]{12})?\.mjs"/.test(html))throw Error('Application script missing');
+await writeFile(`dist/${file}`,bytes);
+await writeFile('dist/index.html',html.replace(/src="app(?:-[a-f0-9]{12})?\.mjs"/,`src="${file}"`).replace(/href="style\.css(?:\?v=[a-f0-9]+)?"/,`href="style.css?v=${cssHash}"`));
+for(const old of await readdir('dist'))if(/^app-[a-f0-9]{12}\.mjs$/.test(old)&&old!==file)await unlink(`dist/${old}`);
+console.log(file);
