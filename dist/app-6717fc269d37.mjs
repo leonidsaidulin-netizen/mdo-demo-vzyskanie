@@ -1757,23 +1757,6 @@ function previewNotifications(rows, targets, channel = "app") {
   }
   return { channel, items, originals, copies };
 }
-function prepareNotificationCases(rows, targets) {
-  return [...new Set(targets.map((t) => JSON.stringify(t)))].map((key) => {
-    const [id, caseId] = JSON.parse(key);
-    const source = rows.find((r2) => r2.id === id), r = structuredClone(source);
-    if (!r) throw Error("\u041B\u0438\u0446\u0435\u0432\u043E\u0439 \u0441\u0447\u0451\u0442 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
-    try {
-      selectCase(r, caseId || null);
-      if (!caseId) createCase(r, r.billing ? billingPeriod(billingLines(r)) : r.period, unassigned(r));
-      if (currentCase(r).stage !== "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435") return [id, caseId];
-      ensureDocument(r, "notice");
-    } catch {
-      return [id, caseId];
-    }
-    Object.assign(source, r);
-    return [id, r.caseId];
-  });
-}
 function previewNotificationBatch(rows, targets, channels) {
   const selected2 = [...new Set(channels)];
   if (selected2.some((c) => !NOTIFICATION_CHANNELS[c])) throw Error("\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u043A\u0430\u043D\u0430\u043B");
@@ -1859,15 +1842,8 @@ function confirmEnforcement(r, p) {
 function installInteractions({ getState, getRole, modal: modal2, save: save2, render: render2, close, toast: toast2, openDrawer: openDrawer2 }) {
   let pending = null, targets = [], index = 0;
   const $3 = (s) => document.querySelector(s);
-  function notify(nextTargets, channels = ["app"], selectedIndex = 0, prepared = false) {
+  function notify(nextTargets, channels = ["app"], selectedIndex = 0) {
     if (getRole() !== "lawyer") throw Error("\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u044F\u0435\u0442 \u044E\u0440\u0438\u0441\u0442");
-    if (!prepared) {
-      const copy = structuredClone(getState().rows);
-      nextTargets = prepareNotificationCases(copy, nextTargets);
-      for (const [id] of nextTargets) Object.assign(getState().rows.find((r) => r.id === id), copy.find((r) => r.id === id));
-      save2();
-      render2();
-    }
     targets = nextTargets;
     index = selectedIndex;
     const p = previewNotificationBatch(getState().rows, targets, channels);
@@ -1900,7 +1876,7 @@ function installInteractions({ getState, getRole, modal: modal2, save: save2, re
     try {
       if (e.target.dataset.notificationChannel || e.target.id === "allNotificationChannels") {
         const channels = e.target.id === "allNotificationChannels" ? e.target.checked ? Object.keys(NOTIFICATION_CHANNELS) : [] : [...document.querySelectorAll("[data-notification-channel]:checked")].map((el) => el.dataset.notificationChannel);
-        notify(targets, channels, 0, true);
+        notify(targets, channels, 0);
       }
       if (e.target.id === "enforcementRecipient") enforcement(pending.p.id, e.target.value);
     } catch (err) {
@@ -1908,10 +1884,16 @@ function installInteractions({ getState, getRole, modal: modal2, save: save2, re
     }
   });
   document.addEventListener("click", (e) => {
+    if (e.target.closest('[data-action="close"]')) {
+      pending = null;
+      targets = [];
+      return;
+    }
     const b = e.target.closest("[data-flow-confirm],[data-flow-preview]");
     if (!b) return;
     try {
-      if (b.dataset.flowPreview !== void 0) return notify(targets, pending.p.channels, Number(b.dataset.flowPreview), true);
+      if (!pending) return;
+      if (b.dataset.flowPreview !== void 0) return notify(targets, pending.p.channels, Number(b.dataset.flowPreview));
       if (getRole() !== "lawyer") throw Error("\u041D\u0443\u0436\u043D\u0430 \u0440\u043E\u043B\u044C \u044E\u0440\u0438\u0441\u0442\u0430");
       if (pending.kind === "notification") {
         const first = pending.p.items.find((x) => !x.reason), n = confirmNotificationBatch(getState().rows, pending.p);

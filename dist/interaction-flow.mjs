@@ -35,21 +35,6 @@ export function previewNotifications(rows,targets,channel='app'){
   }
   return {channel,items,originals,copies};
 }
-export function prepareNotificationCases(rows,targets){
-  return [...new Set(targets.map(t=>JSON.stringify(t)))].map(key=>{
-    const [id,caseId]=JSON.parse(key);
-    const source=rows.find(r=>r.id===id),r=structuredClone(source);
-    if(!r)throw Error('Лицевой счёт не найден');
-    try{
-      selectCase(r,caseId||null);
-      if(!caseId)createCase(r,r.billing?billingPeriod(billingLines(r)):r.period,unassigned(r));
-      if(currentCase(r).stage!=='Уведомление')return [id,caseId];
-      ensureDocument(r,'notice');
-    }catch{return [id,caseId];}
-    Object.assign(source,r);
-    return [id,r.caseId];
-  });
-}
 export function previewNotificationBatch(rows,targets,channels){
   const selected=[...new Set(channels)];
   if(selected.some(c=>!NOTIFICATION_CHANNELS[c]))throw Error('Неизвестный канал');

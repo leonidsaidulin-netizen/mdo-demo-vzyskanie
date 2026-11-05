@@ -6,18 +6,18 @@ import {currentCase} from '../dist/cases.mjs';
 import {stageDocumentEntries,caseProgress} from '../dist/documents.mjs';
 import {templateList} from '../dist/workbench.mjs';
 import {recordContactResult} from '../dist/lawyer-journey.mjs';
-import {prepareNotificationCases,previewNotificationBatch,confirmNotificationBatch,NOTIFICATION_CHANNELS} from '../dist/interaction-flow.mjs';
+import {previewNotificationBatch,confirmNotificationBatch,NOTIFICATION_CHANNELS} from '../dist/interaction-flow.mjs';
 const setup=()=>{const s=seed();installDemoBilling(s);return s;};
-test('River: preparation creates one case, all channels send independently without duplicates',()=>{
- const s=setup(),r=s.rows.find(r=>r.id==='4001'),targets=prepareNotificationCases(s.rows,[[r.id,null]]);
- assert.equal(r.cases.length,1);assert.equal(r.stage,'Уведомление');assert.equal(r.events.length,0);
+test('River: only confirmation creates one case, all channels send independently without duplicates',()=>{
+ const s=setup(),r=s.rows.find(r=>r.id==='4001'),targets=[[r.id,null]];
+ assert.equal(r.cases.length,0);assert.equal(r.stage,'Без дела');assert.equal(r.events.length,0);
  const before=structuredClone(s),p=previewNotificationBatch(s.rows,targets,Object.keys(NOTIFICATION_CHANNELS));assert.deepEqual(s,before);
  assert.equal(p.items.length,6);assert.ok(p.items.every(x=>!x.reason),JSON.stringify(p.items.map(x=>x.reason)));
  assert.equal(confirmNotificationBatch(s.rows,p),6);assert.equal(r.cases.length,1);assert.equal(r.events.length,6);
  assert.equal(r.events.filter(e=>e.status==='Отправлено (демо)').length,4);
  assert.equal(r.events.filter(e=>e.status==='Сформировано для печати (демо)').length,2);
  assert.ok(!r.events.some(e=>e.status==='Доставлено (демо)'));
- assert.equal(previewNotificationBatch(s.rows,targets,Object.keys(NOTIFICATION_CHANNELS)).items.filter(x=>!x.reason).length,0);
+ assert.equal(previewNotificationBatch(s.rows,[[r.id,r.caseId]],Object.keys(NOTIFICATION_CHANNELS)).items.filter(x=>!x.reason).length,0);
  assert.equal(currentCase(r).drafts.filter(d=>d.kind==='demand').length,1);
 });
 test('missing one contact does not block other channels; stale preview is atomic',()=>{
@@ -58,9 +58,12 @@ test('sample enrichment never overwrites edited data, imports or unconfirmed bal
  r.principal-=1;s.imports=[{}];assert.equal(upgradeUntouchedSampleDetails(s),false);
 });
 test('bulk preparation excludes stale account without blocking a valid account',()=>{
- const s=setup(),p=prepareNotificationCases(s.rows,[['4001',null],['4002',null]]);
- const preview=previewNotificationBatch(s.rows,p,['app','notice']);
+ const s=setup(),before=structuredClone(s);
+ const preview=previewNotificationBatch(s.rows,[['4001',null],['4002',null]],['app','notice']);
+ assert.deepEqual(s,before);
  assert.equal(preview.items.filter(x=>!x.reason).length,2);
  assert.ok(preview.items.filter(x=>x.id==='4002').every(x=>/Устаревший/.test(x.reason)));
+ confirmNotificationBatch(s.rows,preview);
+ assert.equal(s.rows.find(r=>r.id==='4001').cases.length,1);
  assert.equal(s.rows.find(r=>r.id==='4002').cases.length,0);
 });
