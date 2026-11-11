@@ -874,6 +874,13 @@ function accountingAction(rec, role2) {
   return role2 === "lawyer" ? { label: requests[rec.key], action: "review" } : { label: rec.label, action: rec.key === "reconcile" ? "payment" : "resolve" };
 }
 function roleRecommendation(r, role2) {
+  const scope = r._caseView ? r : workRecord(r);
+  if (role2 === "lawyer" && scope.stage === "\u0411\u0435\u0437 \u0434\u0435\u043B\u0430" && !scope.caseId) {
+    const rec2 = recommendation(scope);
+    if (rec2.key === "waiting") return { ...rec2, label: "\u0421\u0432\u0435\u0440\u0438\u0442\u044C. \u041F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0439 \u0434\u043E\u043B\u0433 \u043D\u0430 \u041B\u0421", action: "reviewStatus" };
+    if (["caseBalance", "reconcile", "stale", "dispute"].includes(rec2.key)) return { ...rec2, label: "\u0417\u0430\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u0443 \u0440\u0430\u0441\u0447\u0451\u0442\u0447\u0438\u043A\u0430 \u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u0438\u0435", action: "review" };
+    return { key: "new", label: "\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435", detail: "\u0414\u043E\u043B\u0433 \u044D\u0442\u043E\u0433\u043E \u043F\u0435\u0440\u0438\u043E\u0434\u0430 \u0435\u0449\u0451 \u043D\u0435 \u0432\u043A\u043B\u044E\u0447\u0451\u043D \u0432 \u0434\u0435\u043B\u043E.", action: "channels", tone: "pink" };
+  }
   const rec = recommendation(r), accounting = accountingAction(rec, role2);
   if (accounting) return { ...rec, ...accounting };
   if (role2 === "accountant") return { ...rec, label: "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435 \u0438 \u0440\u0430\u0441\u0447\u0451\u0442", action: "data", detail: `\u041E\u0441\u0442\u0430\u0442\u043E\u043A \u043D\u0430 ${r.asOf}. \u0420\u0430\u0431\u043E\u0442\u0430 \u0441 \u043D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u044F\u043C\u0438 \u0438 \u043E\u043F\u043B\u0430\u0442\u0430\u043C\u0438.` };

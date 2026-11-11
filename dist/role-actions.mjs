@@ -1,4 +1,5 @@
 import {recommendation,STAGES} from './model.mjs';
+import {workRecord} from './cases.mjs';
 import {caseProgress} from './documents.mjs';
 
 const requests={
@@ -16,6 +17,14 @@ function accountingAction(rec,role){
     :{label:rec.label,action:rec.key==='reconcile'?'payment':'resolve'};
 }
 export function roleRecommendation(r,role){
+  const scope=r._caseView?r:workRecord(r);
+  if(role==='lawyer'&&scope.stage==='Без дела'&&!scope.caseId){
+    const rec=recommendation(scope);
+    if(rec.key==='waiting')return {...rec,label:'Сверить. Повторный долг на ЛС',action:'reviewStatus'};
+    // Keep monetary safety checks, but never inherit tasks or contact outcomes from an older case.
+    if(['caseBalance','reconcile','stale','dispute'].includes(rec.key))return {...rec,label:'Запросить у расчётчика распределение',action:'review'};
+    return {key:'new',label:'Подготовить уведомление',detail:'Долг этого периода ещё не включён в дело.',action:'channels',tone:'pink'};
+  }
   const rec=recommendation(r),accounting=accountingAction(rec,role);
   if(accounting)return {...rec,...accounting};
   if(role==='accountant')return {...rec,label:'Открыть данные и расчёт',action:'data',detail:`Остаток на ${r.asOf}. Работа с начислениями и оплатами.`};
