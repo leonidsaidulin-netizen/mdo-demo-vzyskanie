@@ -9,6 +9,8 @@ import {roleRecommendation,roleCaseProgress,visibleStages} from './role-actions.
 import {installInteractions} from './interaction-ui.mjs';
 import {installDemoBilling,installOwnerExample,DEMO_COMPANY} from './demo-billing.mjs';
 import {caseNotices} from './lawyer-journey.mjs';
+import {installSpecUI} from './spec-ui.mjs';
+import {installSpecExamples} from './spec-logic.mjs';
 const $=s=>document.querySelector(s), KEY='mdo-debt-demo-v1';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=n=>`<i data-lucide="${n}"></i>`;
@@ -20,6 +22,7 @@ upgradeUntouchedSampleDetails(state);
 if(installDemoBilling(state)){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{storageWarning='Учебные сценарии доступны, но хранилище браузера заполнено.';}}
 let view='overview',filters={},selected=new Set(),advanced=false,drawerId=null,drawerTab='overview',returnFocus=null,preview=[];
 if(installOwnerExample(state)){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{storageWarning='Не удалось сохранить пример долей';}}
+if(installSpecExamples(state)){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{storageWarning='Не удалось сохранить примеры повторного долга';}}
 let reportFrom='2026-10-01',reportTo=TODAY,role='lawyer',overviewScope={company:DEMO_COMPANY,building:'',houseStatus:''};
 let STAGES=ALL_STAGES;
 const recommendation=r=>roleRecommendation(r,role);
@@ -89,6 +92,7 @@ function renderContent(){
   if(['registry','accounts','work'].includes(view)){
     [...$('#content tbody').rows].forEach((tr,i)=>tr.querySelector('.debtor-link').insertAdjacentHTML('beforeend',`<small>${esc(ownersSummary(visible()[i]))}</small>`));
   }
+  specUI.enhance(view,filters);
   initIcons();
 }
 function renderCaseList(){
@@ -157,7 +161,7 @@ function openDrawer(id,tab='overview',keepCase=false){
   drawerId=id;drawerTab=tab;
   const r=row(id);if(!keepCase){const w=workRecord(r);selectCase(r,filters.stage==='Без дела'?null:w.caseId);}
   const rec=recommendation({...r,_caseView:true}),info=STAGE_INFO[r.stage],legal=role==='lawyer';
-  const tabs=[['overview','Карточка'],['documents',`Документы дела (${[...(currentCase(r)?.drafts||[]),...(currentCase(r)?.documents||[])].filter(d=>!d.archived).length})`],['data','Данные и расчёт'],['history','История']];
+  const tabs=[['overview','Карточка'],['documents',`Документы дела (${[...(currentCase(r)?.drafts||[]),...(currentCase(r)?.documents||[])].filter(d=>!d.archived).length})`],['data','Баланс и история'],['history','История']];
   let body='';
   if(tab==='overview'){
     const balance=currentCase(r)?.remaining||unassigned(r);
@@ -175,7 +179,7 @@ function openDrawer(id,tab='overview',keepCase=false){
       ${r.claim?`<h3>Требование по делу ${esc(r.caseId)}</h3><div class="component-table"><table><tbody><tr><td>Первоначальное требование</td><td>${money(r.claim.amount)}</td></tr><tr><td>Период</td><td>${esc(r.claim.period)}</td></tr></tbody></table></div><small>Требование сохранено. Оплаты меняют остаток, а не сумму первоначального документа.</small>`:''}
       ${r.payments.some(p=>!r.caseId||p.caseId===r.caseId)?`<h3>Учтённые поступления</h3>${r.payments.filter(p=>!r.caseId||p.caseId===r.caseId).map(p=>`<div class="source-row"><div><strong>${money(p.amount)} · ${date(p.at)}</strong><small>Долг ${money(p.principal)} · пени ${money(p.penalty)} · пошлина ${money(p.fee)}</small><small>${esc(p.ownerName||'Общий долг ЛС')} · ${esc(p.caseId||'Вне дела')}</small><small>Этап при оплате: ${esc(p.stage||'не зафиксирован')}</small></div></div>`).join('')}`:''}
       <p class="form-note">${esc(r.source)} · ${date(r.asOf)}. Оплаты разносит расчётчик, дело ведёт юрист.</p>
-      ${r.billing?`<details class="scenario-tools"><summary>Проверка сценария на тестовых данных</summary>${demoControls(r,role)}</details>`:''}`;
+      `;
   }else if(tab==='data'){body=dataPanel(r);
   }else if(tab==='history'){
     body=`<ul class="timeline">${r.events.filter(e=>!e.caseId||!r.caseId||e.caseId===r.caseId).map(e=>`<li><strong>${esc(e.label)}</strong><small>${date(e.at)} · ${esc(e.status)}</small><p>${e.amount!==undefined?money(e.amount)+' · ':''}${esc(e.note)}</p>${CHANNELS.includes(e.action)&&['Подготовлено (демо)','Отправлено (демо)','Сформировано для печати (демо)'].includes(e.status)?`<button class="button ghost small" data-result="${esc(e.id)}" data-id="${r.id}">Отметить результат</button>`:''}</li>`).join('')||'<li>Действий пока нет</li>'}</ul>`;
@@ -185,6 +189,7 @@ function openDrawer(id,tab='overview',keepCase=false){
   showOverlay(`<div class="drawer-shade" data-action="close"></div><section class="drawer" role="dialog" aria-modal="true" aria-label="Лицевой счёт ${esc(r.account)}"><header class="drawer-head"><div><small>${esc(r.company)} · ЛС ${esc(r.account)}</small><h2>${esc(r.building)}, кв. ${esc(r.flat)}</h2>${badge(r.stage,'pink')}</div><button class="icon-button" data-action="close" aria-label="Закрыть">${icon('x')}</button></header><div class="drawer-body"><nav class="drawer-tabs">${tabs.map(([v,l])=>`<button data-drawer-tab="${v}" class="${tab===v?'active':''}">${l}</button>`).join('')}</nav>${body}</div></section>`);
   if(role==='accountant')for(const el of $('#overlay').querySelectorAll('[data-work="newCase"],[data-work="legal"],[data-work="agreement"],[data-work="transition"],[data-work="closeCase"],[data-work="uploadHouse"],[data-work="uploadCase"],[data-work="installment"],[data-work="taskDone"],[data-single-action="task"]')){el.disabled=true;el.title='Действие юриста';}
   if(role==='lawyer')for(const el of $('#overlay').querySelectorAll('[data-work="monthly"],[data-work="owners"],[data-work="previous"]')){el.disabled=true;el.title='Сведения заполняет расчётчик';}
+  specUI.drawer(r,tab);
 }
 function modal(title,subtitle,body,footer){showOverlay(`<div class="modal-shade"><section class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header class="modal-head"><div><h2>${esc(title)}</h2><small>${esc(subtitle)}</small></div><button class="icon-button" data-action="close" aria-label="Закрыть">${icon('x')}</button></header><div class="modal-body">${body}</div><div class="modal-foot"><button class="button secondary" data-action="close">${footer?'Отмена':'Закрыть'}</button>${footer||''}</div></section></div>`);}
 function chooseChannel(){interactions.notify([...selected].map(id=>[id,filters.stage==='Без дела'?null:workRecord(row(id)).caseId]));}
@@ -214,7 +219,7 @@ function payment(id){
 }
 function ownershipPanel(r){
   const c=currentCase(r),owners=c?.ownerBalances;
-  return `<section class="case-section"><h3>Собственники и погашение долей</h3>${owners?`<div class="table-frame"><table><thead><tr><th>Собственник / доля</th><th>Распределено</th><th>Погашено</th><th>Осталось</th></tr></thead><tbody>${owners.map(o=>`<tr><td>${esc(o.name)}<small>${o.share}%</small></td><td>${money(amount(o.initial))}</td><td>${money(amount(o.initial)-amount(o.remaining))}</td><td>${money(amount(o.remaining))}<small>${amount(o.remaining)===0?'Доля погашена':'В работе'}</small></td></tr>`).join('')}</tbody></table></div>`:`<p>${r.owners.map(o=>`${esc(o.name)} · ${o.share}%`).join('<br>')||'Собственники не загружены'}</p>${r.owners.length?`<button class="button secondary small" data-ownership="${c?'assign':'create'}" data-id="${r.id}">${c?'Распределить остаток по долям':'Создать отдельные дела по долям'}</button>`:''}`}<small>Доли и основание распределения подтверждает сотрудник. Оплата одного собственника не погашает долг другого.</small></section>`;
+  return `<section class="case-section"><h3>Собственники и погашение долей</h3>${owners?`<div class="table-frame"><table><thead><tr><th>Собственник / доля</th><th>Распределено</th><th>Погашено</th><th>Осталось</th></tr></thead><tbody>${owners.map(o=>`<tr><td>${esc(o.name)}<small>${o.share}%</small></td><td>${money(amount(o.initial))}</td><td>${money(amount(o.initial)-amount(o.remaining))}</td><td>${money(amount(o.remaining))}<small>${amount(o.remaining)===0?'Доля погашена':'В работе'}</small></td></tr>`).join('')}</tbody></table></div>`:`<p>${r.owners.map(o=>`${esc(o.name)} · ${o.share}%`).join('<br>')||'Собственники не загружены'}</p>${c&&r.owners.length?`<button class="button secondary small" data-ownership="${c?'assign':'create'}" data-id="${r.id}">${c?'Распределить остаток по долям':'Создать отдельные дела по долям'}</button>`:''}`}<small>Доли и основание распределения подтверждает сотрудник. Оплата одного собственника не погашает долг другого.</small></section>`;
 }
 function refreshPaymentOwner(r){const c=r.cases.find(c=>c.id===$('#paymentCase').value);$('#paymentOwnerField').innerHTML=c?.ownerBalances?`Чей долг погашается<select id="paymentOwner"><option value="">Выберите собственника</option>${c.ownerBalances.map(o=>`<option value="${esc(o.id)}" ${c.ownerBalances.length===1?'selected':''}>${esc(o.name)} · ${o.share}% · остаток ${money(amount(o.remaining))}</option>`).join('')}</select>`:'Общий долг ЛС: распределение по собственникам не задано';}
 function download(name,text,type='text/plain;charset=utf-8'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500);}
@@ -255,7 +260,7 @@ document.addEventListener('click',e=>{
   if(action==='chooseChannel'){try{chooseChannel();}catch(err){toast(err.message);}return;}
   if(action==='template'){download('mdo-debt-template.csv',csv([CSV_FIELDS,...sample().map(r=>CSV_FIELDS.map(k=>r[k]))]),'text/csv;charset=utf-8');return;}
   if(action==='sampleImport'){importPreview(sample());return;}
-  if(action==='export'){download('mdo-debt-registry.csv',csv(visible().map(r=>({'УК':r.company,'Дом':r.building,'Квартира':r.flat,'ЛС':r.account,'Основной долг':r.principal/100,'Пени':r.penalty/100,'Пошлина':r.fee/100,'Остаток':total(r)/100,'Стадия':r.stage,'Категория':r.category,'Следующее действие':recommendation(r).label,'Источник':r.source,'На дату':r.asOf}))), 'text/csv;charset=utf-8');return;}
+  if(action==='export'){download('mdo-debt-registry.csv',csv(visible().map(r=>({'УК':r.company,'Дом':r.building,'Квартира':r.flat,'ЛС':r.account,'Основной долг':r.principal/100,'Пени':r.penalty/100,'Пошлина':r.fee/100,'Остаток':total(r)/100,'Стадии':[...new Set(stagePortions(r).filter(p=>p.id||p.amount>0).map(p=>p.stage))].join('; '),'Дела':r.cases.map(c=>`${c.id}: ${c.period}, ${c.stage}, ${amount(c.remaining)/100} ₽`).join('; '),'Собственники':ownersSummary(r),'Категория':r.category,'Следующее действие':recommendation(r).label,'Источник':r.source,'На дату':r.asOf}))), 'text/csv;charset=utf-8');return;}
   if(el.id==='importTop'){view='sources';render();return;}
   if(el.id==='reset'){modal('Сбросить демо?','Только локальные тестовые данные','<p class="form-note">Все действия в этом прототипе будут заменены исходным набором. Рабочая диспетчерская и её данные не затрагиваются.</p>','<button class="button" id="confirmReset">Сбросить демо</button>');return;}
   if(el.id==='confirmReset'){state=seed();installDemoBilling(state);state.display={notices:true,stages:true};filters={};selected.clear();selectedCases.clear();save();closeOverlay();render();toast('Исходные демо-данные восстановлены');return;}
@@ -308,4 +313,5 @@ function openCaseDrawer(id,tab='overview'){
 }
 const interactions=installInteractions({getState:()=>state,getRole:()=>role,save,render,modal,close:closeOverlay,toast,openDrawer:openCaseDrawer});
 const workbench=installWorkbench({getState:()=>state,getRole:()=>role,save,render,modal,openDrawer:openCaseDrawer,toast,close:closeOverlay,bulk,payment,notify:r=>interactions.notify([[r.id,r.caseId]]),enforcement:r=>interactions.enforcement(r.id),showSources:()=>{closeOverlay();view='sources';render();},recordResult});
+const specUI=installSpecUI({getState:()=>state,getRole:()=>role,save,render,modal,close:closeOverlay,toast});
 render();if(storageWarning)toast(storageWarning);

@@ -142,12 +142,12 @@ function selectCase(r, id) {
   r.claim = c.claim;
   r.stage = c.stage;
 }
-function createCase(r, period, parts) {
+function createCase(r, period2, parts) {
   if (r.caseBalanceConflict) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0443\u0442\u043E\u0447\u043D\u0438\u0442\u0435 \u0434\u043E\u043B\u0433 \u043F\u043E \u0434\u0435\u043B\u0430\u043C");
   if (r.unallocated > 0 || r.disputed || r.reviewTask?.status === "open" || Date.parse("2026-10-29") - Date.parse(r.asOf) > 7 * 864e5) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0435 \u0441\u0432\u0435\u0440\u043A\u0443 \u043B\u0438\u0446\u0435\u0432\u043E\u0433\u043E \u0441\u0447\u0451\u0442\u0430");
   const available = unassigned(r);
-  if (!period?.trim() || COMPONENTS.some((k) => !Number.isSafeInteger(parts[k]) || parts[k] < 0 || parts[k] > available[k]) || amount(parts) <= 0) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043F\u0435\u0440\u0438\u043E\u0434 \u0438 \u0441\u0443\u043C\u043C\u0443 \u0432 \u043F\u0440\u0435\u0434\u0435\u043B\u0430\u0445 \u0434\u043E\u043B\u0433\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B");
-  const c = { id: `\u0412\u0417-${crypto.randomUUID().slice(0, 8)}`, stage: "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435", createdAt: "2026-10-29", stageEnteredAt: "2026-10-29", period: period.trim(), remaining: { ...parts }, balanceConfirmed: true, claim: null, documents: [], legal: {}, schedule: [], closedReason: "" };
+  if (!period2?.trim() || COMPONENTS.some((k) => !Number.isSafeInteger(parts[k]) || parts[k] < 0 || parts[k] > available[k]) || amount(parts) <= 0) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043F\u0435\u0440\u0438\u043E\u0434 \u0438 \u0441\u0443\u043C\u043C\u0443 \u0432 \u043F\u0440\u0435\u0434\u0435\u043B\u0430\u0445 \u0434\u043E\u043B\u0433\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B");
+  const c = { id: `\u0412\u0417-${crypto.randomUUID().slice(0, 8)}`, stage: "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435", createdAt: "2026-10-29", stageEnteredAt: "2026-10-29", period: period2.trim(), remaining: { ...parts }, balanceConfirmed: true, claim: null, documents: [], legal: {}, schedule: [], closedReason: "" };
   if (r.owners?.length > 1) assignOwners(r, c);
   assignBillingCase(r, c);
   r.cases.push(c);
@@ -344,13 +344,13 @@ function execute(state2, ids, action, details = {}) {
   const preview2 = plan(state2.rows, ids, action);
   for (const p of preview2.filter((p2) => !p2.reason)) {
     const r = state2.rows.find((x) => x.id === p.id);
-    const period = r.billing ? billingPeriod(billingLines(r)) : r.period;
+    const period2 = r.billing ? billingPeriod(billingLines(r)) : r.period;
     if (["app", "email", "max", "receipt", "robot", "notice"].includes(action) && !r.cases.some((c) => c.stage === "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435") && amount(unassigned(r)) > 0) {
-      createCase(r, period, unassigned(r));
+      createCase(r, period2, unassigned(r));
     }
     if (action === "case") {
       initializeCases(r);
-      createCase(r, period, unassigned(r));
+      createCase(r, period2, unassigned(r));
       r.next = "\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435";
     }
     if (action === "task") {
@@ -628,6 +628,185 @@ function noticeBadge(r) {
   return `<small class="notice-state">${esc(NOTICE_LABELS[notificationState(r)])}</small>`;
 }
 
+// dist/operations.mjs
+function dateValid(x) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(x || "") && Number.isFinite(Date.parse(x)) && new Date(x).toISOString().slice(0, 10) === x;
+}
+function audit(r, label, note) {
+  r.events.unshift({ id: crypto.randomUUID(), at: `${TODAY}T12:00:00`, action: "work", label, status: "\u0423\u0447\u0442\u0435\u043D\u043E \u0432 \u0434\u0435\u043C\u043E", note, caseId: r.caseId });
+}
+function requestReview(r, due, reason) {
+  if (!dateValid(due) || due < TODAY || !reason.trim()) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043F\u0440\u0438\u0447\u0438\u043D\u0443 \u0438 \u0441\u0440\u043E\u043A \u0441\u0432\u0435\u0440\u043A\u0438");
+  if (r.reviewTask?.status === "open") throw Error("\u0417\u0430\u043F\u0440\u043E\u0441 \u0443\u0436\u0435 \u043F\u0435\u0440\u0435\u0434\u0430\u043D \u0431\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438");
+  r.reviewTask = { due, reason: reason.trim(), status: "open", owner: "\u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u044F" };
+  audit(r, "\u041F\u0435\u0440\u0435\u0434\u0430\u043D\u043E \u0431\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438", reason);
+}
+function resolveReview(r, note) {
+  if (!note.trim()) throw Error("\u041E\u043F\u0438\u0448\u0438\u0442\u0435 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0441\u0432\u0435\u0440\u043A\u0438");
+  if (!r.reviewTask || r.reviewTask.status !== "open") throw Error("\u041D\u0435\u0442 \u043E\u0442\u043A\u0440\u044B\u0442\u043E\u0433\u043E \u0437\u0430\u043F\u0440\u043E\u0441\u0430");
+  if (r.caseBalanceConflict || r.unallocated > 0 || days(r.asOf) > 7 || r.disputed) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0443\u0441\u0442\u0440\u0430\u043D\u0438\u0442\u0435 \u043F\u0440\u0438\u0447\u0438\u043D\u0443: \u043E\u043F\u043B\u0430\u0442\u0430, \u043E\u0441\u0442\u0430\u0442\u043A\u0438 \u0434\u0435\u043B, \u0441\u043F\u043E\u0440 \u0438\u043B\u0438 \u0443\u0441\u0442\u0430\u0440\u0435\u0432\u0448\u0438\u0439 \u0440\u0435\u0435\u0441\u0442\u0440");
+  r.reviewTask.status = "done";
+  r.reviewTask.result = note;
+  audit(r, "\u0421\u0432\u0435\u0440\u043A\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430", note);
+}
+function saveLegal(r, input) {
+  const c = currentCase(r);
+  if (!c) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0437\u0434\u0430\u0439\u0442\u0435 \u0434\u0435\u043B\u043E");
+  if (!input.number.trim() || !dateValid(input.date) || input.date > TODAY || !dateValid(input.nextDate) || input.nextDate < TODAY || !input.next.trim()) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043D\u043E\u043C\u0435\u0440, \u0434\u0430\u0442\u0443 \u0434\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u0430, \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0438 \u0441\u0440\u043E\u043A");
+  c.legal = { ...c.legal, ...input };
+  r.next = input.next;
+  r.nextDate = input.nextDate;
+  r.task = { text: input.next, due: input.nextDate, owner: r.owner, status: "open" };
+  audit(r, "\u0420\u0435\u043A\u0432\u0438\u0437\u0438\u0442\u044B \u0434\u0435\u043B\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B", `${input.number} \xB7 ${input.status}`);
+}
+function saveAgreement(r, number, date2, schedule) {
+  const c = currentCase(r);
+  if (!c) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0437\u0434\u0430\u0439\u0442\u0435 \u0434\u0435\u043B\u043E");
+  if (!number.trim() || !dateValid(date2) || date2 > TODAY) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043D\u043E\u043C\u0435\u0440 \u0438 \u0434\u0430\u0442\u0443 \u0441\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u044F");
+  if (!schedule.length || schedule.some((s) => !dateValid(s.date) || s.date < date2 || !Number.isSafeInteger(s.amount) || s.amount <= 0)) throw Error("\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0434\u0430\u0442\u044B \u0438 \u0441\u0443\u043C\u043C\u044B \u0433\u0440\u0430\u0444\u0438\u043A\u0430");
+  if (schedule.reduce((a, s) => a + s.amount, 0) !== amount(c.remaining)) throw Error("\u0413\u0440\u0430\u0444\u0438\u043A \u0434\u043E\u043B\u0436\u0435\u043D \u043F\u043E\u043A\u0440\u044B\u0432\u0430\u0442\u044C \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0434\u0435\u043B\u0430");
+  if (!c.documents.some((d) => d.kind === "agreement" && !d.archived)) throw Error("\u041F\u0440\u0438\u043A\u0440\u0435\u043F\u0438\u0442\u0435 \u0444\u0430\u0439\u043B \u043F\u043E\u0434\u043F\u0438\u0441\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u044F");
+  c.agreement = { number: number.trim(), date: date2 };
+  c.schedule = schedule.sort((a, b) => a.date.localeCompare(b.date));
+  if (c.stage !== "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435") c.stageEnteredAt = TODAY;
+  c.stage = "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435";
+  r.stage = c.stage;
+  r.promise = null;
+  r.task = null;
+  audit(r, "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435 \u0438 \u0433\u0440\u0430\u0444\u0438\u043A \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B", number);
+}
+function markInstallment(r, index, paymentIndexes) {
+  const c = currentCase(r), s = c?.schedule[index];
+  if (!s || s.paid) throw Error("\u041F\u043B\u0430\u0442\u0451\u0436 \u0443\u0436\u0435 \u043E\u0442\u043C\u0435\u0447\u0435\u043D \u0438\u043B\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
+  const chosen = [...new Set(paymentIndexes)];
+  if (!chosen.length || chosen.some((i) => !r.payments[i] || r.payments[i].caseId !== c.id)) throw Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0443\u0447\u0442\u0451\u043D\u043D\u044B\u0435 \u043F\u043B\u0430\u0442\u0435\u0436\u0438 \u0438\u043C\u0435\u043D\u043D\u043E \u044D\u0442\u043E\u0433\u043E \u0434\u0435\u043B\u0430");
+  if (c.schedule.some((x) => x.paid && x.paymentIds?.some((id) => chosen.some((i) => r.payments[i].id === id)))) throw Error("\u041F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u0435 \u0443\u0436\u0435 \u0441\u0432\u044F\u0437\u0430\u043D\u043E \u0441 \u0434\u0440\u0443\u0433\u0438\u043C \u043F\u043B\u0430\u0442\u0435\u0436\u043E\u043C \u0433\u0440\u0430\u0444\u0438\u043A\u0430");
+  if (chosen.reduce((sum2, i) => sum2 + r.payments[i].amount, 0) !== s.amount) throw Error("\u0421\u0443\u043C\u043C\u0430 \u043F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u0439 \u0434\u043E\u043B\u0436\u043D\u0430 \u0441\u043E\u0432\u043F\u0430\u0441\u0442\u044C \u0441 \u043F\u043B\u0430\u0442\u0435\u0436\u043E\u043C \u0433\u0440\u0430\u0444\u0438\u043A\u0430");
+  for (const i of chosen) r.payments[i].id ||= crypto.randomUUID();
+  s.paid = true;
+  s.paymentIds = chosen.map((i) => r.payments[i].id);
+  audit(r, "\u041F\u043B\u0430\u0442\u0451\u0436 \u0433\u0440\u0430\u0444\u0438\u043A\u0430 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D", s.date);
+}
+function saveOwners(r, list) {
+  if (!list.length || list.some((o) => !o.name.trim() || !Number.isFinite(o.share) || o.share <= 0 || o.share > 100) || Math.abs(list.reduce((s, o) => s + o.share, 0) - 100) > 1e-3) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u043E\u0432; \u0441\u0443\u043C\u043C\u0430 \u0434\u043E\u043B\u0435\u0439 \u0434\u043E\u043B\u0436\u043D\u0430 \u0431\u044B\u0442\u044C 100%");
+  r.owners = list;
+  audit(r, "\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u0443\u0442\u043E\u0447\u043D\u0435\u043D\u044B", "\u0414\u043E\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u044B");
+}
+function validateMonthly(rows) {
+  const seen = /* @__PURE__ */ new Set();
+  return rows.map((x) => {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(x.month) || seen.has(x.month)) throw Error("\u041F\u0435\u0440\u0438\u043E\u0434\u044B: \u0413\u0413\u0413\u0413-\u041C\u041C, \u0431\u0435\u0437 \u0434\u0443\u0431\u043B\u0435\u0439");
+    seen.add(x.month);
+    const v = { month: x.month, area: Number(x.area), formula: String(x.formula || "").trim(), opening: cents(x.opening), charges: cents(x.charges), payments: cents(x.payments), closing: cents(x.closing) };
+    if (!Number.isFinite(v.area) || v.area <= 0 || !v.formula || v.opening + v.charges - v.payments !== v.closing) throw Error(`\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u043B\u043E\u0449\u0430\u0434\u044C, \u0444\u043E\u0440\u043C\u0443\u043B\u0443 \u0438 \u0431\u0430\u043B\u0430\u043D\u0441 \u0437\u0430 ${x.month}`);
+    return v;
+  }).sort((a, b) => a.month.localeCompare(b.month));
+}
+function saveMonthly(r, input) {
+  const rows = validateMonthly(input);
+  if (!rows.length || rows.at(-1).closing !== r.principal) throw Error("\u0418\u0442\u043E\u0433 \u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0433\u043E \u0434\u043E\u043B\u0433\u0430 \u0434\u043E\u043B\u0436\u0435\u043D \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0442\u044C \u0441 \u0442\u0435\u043A\u0443\u0449\u0438\u043C \u0440\u0435\u0435\u0441\u0442\u0440\u043E\u043C");
+  for (let i = 1; i < rows.length; i++) if (rows[i].opening !== rows[i - 1].closing) throw Error("\u041D\u0430\u0447\u0430\u043B\u044C\u043D\u044B\u0439 \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u043D\u0435 \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0438\u043C \u043C\u0435\u0441\u044F\u0446\u0435\u043C");
+  r.charges = rows;
+  audit(r, "\u0420\u0430\u0441\u0447\u0451\u0442 \u0437\u0430\u0434\u043E\u043B\u0436\u0435\u043D\u043D\u043E\u0441\u0442\u0438 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D", `${rows.length} \u043C\u0435\u0441\u044F\u0446\u0435\u0432; \u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0434\u043E\u043B\u0433 \u0441\u0432\u0435\u0440\u0451\u043D`);
+}
+function packetFiles(state2, r) {
+  return [...state2.houseDocuments?.[JSON.stringify([r.company, r.building])] || [], ...currentCase(r)?.documents || []];
+}
+
+// dist/spec-logic.mjs
+var period = (s) => {
+  const m = String(s || "").match(/^(\d{2})\.(\d{2})\.(\d{4})\s*[—–-]\s*(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!m) return null;
+  const a = `${m[3]}-${m[2]}-${m[1]}`, b = `${m[6]}-${m[5]}-${m[4]}`;
+  return dateValid(a) && dateValid(b) && a <= b ? [a, b] : null;
+};
+function installSpecExamples(state2) {
+  if (state2.specExamplesVersion) return false;
+  for (const [id, conflict] of [["\u041F\u041E\u0412\u0422\u041E\u0420-001", false], ["\u0421\u0412\u0415\u0420\u041A\u0410-001", true]]) {
+    if (state2.rows.some((r2) => r2.id === id)) continue;
+    const r = { ...seed().rows[0], id, account: id, company: "\u0423\u041A \xAB\u0423\u0447\u0435\u0431\u043D\u0430\u044F\xBB", building: "\u0423\u0447\u0435\u0431\u043D\u0430\u044F, 30", flat: conflict ? 2 : 1, source: "\u0423\u0447\u0435\u0431\u043D\u044B\u0439 \u0440\u0435\u0435\u0441\u0442\u0440", sourceId: "spec-examples", asOf: TODAY, period: "01.09.2026 \u2014 30.09.2026", principal: 8e5, penalty: 0, fee: 0, cases: [], caseId: null, claim: null, unallocated: 0, caseBalanceConflict: false, disputed: false, events: [], payments: [], owners: [{ name: "\u0423\u0447\u0435\u0431\u043D\u044B\u0439 \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A", share: 100 }], charges: [] };
+    createCase(r, r.period, unassigned(r));
+    r.principal = 1e6;
+    r.period = "01.10.2026 \u2014 31.10.2026";
+    selectCase(r, null);
+    r.caseBalanceConflict = conflict;
+    state2.rows.push(r);
+  }
+  state2.specExamplesVersion = 1;
+  return true;
+}
+function outsidePeriod(r) {
+  return r.billing ? billingPeriod(billingLines(r)) : r.period;
+}
+function repeatSignature(r) {
+  return JSON.stringify([outsidePeriod(r), unassigned(r), r.cases.map((c) => [c.id, c.period])]);
+}
+function noCaseAssessment(r) {
+  const free = unassigned(r), sum2 = amount(free), previous = r.cases || [];
+  const distribution = (detail) => ({ key: "caseBalance", label: "\u0417\u0430\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u0443 \u0440\u0430\u0441\u0447\u0451\u0442\u0447\u0438\u043A\u0430 \u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u0438\u0435", detail: detail + (r.reviewTask?.status === "open" ? ` \u0417\u0430\u043F\u0440\u043E\u0441 \u0443\u0436\u0435 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D: ${r.reviewTask.reason}; \u0441\u0440\u043E\u043A ${r.reviewTask.due}.` : ""), action: r.reviewTask?.status === "open" ? "reviewStatus" : "review", tone: "amber" });
+  if (r.caseBalanceConflict || Object.values(free).some((x) => x < 0)) return distribution("\u041D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u043E, \u043A\u0430\u043A\u0430\u044F \u0447\u0430\u0441\u0442\u044C \u0434\u043E\u043B\u0433\u0430 \u0443\u0436\u0435 \u0432 \u0434\u0435\u043B\u0430\u0445, \u0430 \u043A\u0430\u043A\u0430\u044F \u043E\u0441\u0442\u0430\u0451\u0442\u0441\u044F \u0432\u043D\u0435 \u0434\u0435\u043B.");
+  if (sum2 <= 0) return null;
+  const current = period(outsidePeriod(r));
+  if (previous.length && (!current || previous.some((c) => {
+    const p = period(c.period);
+    return !p || current[0] <= p[1] && p[0] <= current[1];
+  }))) return distribution("\u041F\u0435\u0440\u0438\u043E\u0434 \u0434\u043E\u043B\u0433\u0430 \u043F\u0435\u0440\u0435\u0441\u0435\u043A\u0430\u0435\u0442\u0441\u044F \u0441 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C \u0434\u0435\u043B\u043E\u043C \u0438\u043B\u0438 \u043D\u0435 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D. \u041D\u0435\u043B\u044C\u0437\u044F \u043F\u0440\u0435\u0434\u044A\u044F\u0432\u043B\u044F\u0442\u044C \u043E\u0434\u043D\u0443 \u0441\u0443\u043C\u043C\u0443 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E.");
+  const blockers = [r.reviewTask?.status === "open" ? `\u041E\u0436\u0438\u0434\u0430\u0435\u0442\u0441\u044F \u043E\u0442\u0432\u0435\u0442 \u0440\u0430\u0441\u0447\u0451\u0442\u0447\u0438\u043A\u0430: ${r.reviewTask.reason}` : "", r.unallocated > 0 ? "\u041F\u043E\u0441\u0442\u0443\u043F\u0438\u0432\u0448\u0430\u044F \u043E\u043F\u043B\u0430\u0442\u0430 \u0435\u0449\u0451 \u043D\u0435 \u0443\u0447\u0442\u0435\u043D\u0430" : "", days(r.asOf) > 7 ? "\u041D\u0435\u0442 \u0430\u043A\u0442\u0443\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u043E\u0441\u0442\u0430\u0442\u043A\u0430 \u0438\u0437 \u0431\u0438\u043B\u043B\u0438\u043D\u0433\u0430" : "", r.disputed ? "\u0421\u0443\u043C\u043C\u0430 \u043E\u0441\u043F\u0430\u0440\u0438\u0432\u0430\u0435\u0442\u0441\u044F" : "", !current ? "\u041F\u0435\u0440\u0438\u043E\u0434 \u0434\u043E\u043B\u0433\u0430 \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D" : ""].filter(Boolean);
+  if (blockers.length) return { key: "blocked", label: "", detail: blockers.join("; "), action: "data", tone: "amber", blocked: true };
+  if (previous.length && r.repeatDebtReview !== repeatSignature(r)) return { key: "repeatDebt", label: "\u0421\u0432\u0435\u0440\u0438\u0442\u044C. \u041F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0439 \u0434\u043E\u043B\u0433 \u043D\u0430 \u041B\u0421", detail: `\u041D\u043E\u0432\u044B\u0439 \u043F\u0435\u0440\u0438\u043E\u0434: ${outsidePeriod(r)}. \u041F\u0440\u0435\u0436\u043D\u0438\u0445 \u0434\u0435\u043B: ${previous.length}. \u0421\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u0435\u0440\u0438\u043E\u0434\u044B \u043F\u0435\u0440\u0435\u0434 \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435\u043C.`, action: "repeatReview", tone: "amber" };
+  return { key: "new", label: "\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435", detail: `\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0439 \u0434\u043E\u043B\u0433 \u0432\u043D\u0435 \u0434\u0435\u043B \u0437\u0430 ${outsidePeriod(r)}.`, action: "channels", tone: "pink" };
+}
+function confirmRepeat(r) {
+  const a = noCaseAssessment(r);
+  if (a?.key !== "repeatDebt") throw Error("\u041D\u0435\u0442 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u043E\u0433\u043E \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u0433\u043E \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E\u0433\u043E \u0434\u043E\u043B\u0433\u0430");
+  r.repeatDebtReview = repeatSignature(r);
+  audit(r, "\u041F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0439 \u0434\u043E\u043B\u0433 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D", outsidePeriod(r));
+}
+function caseWork(c) {
+  if (c.stage === "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E") return { label: "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E", due: null };
+  const open = (c.reminders || []).filter((t) => t.status === "open").sort((a, b) => a.due.localeCompare(b.due)), dates = [...open.map((t) => t.due), c.communicationNextDate, c.legal?.nextDate, c.stage === "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435" ? c.schedule?.filter((x) => !x.paid).sort((a, b) => a.date.localeCompare(b.date))[0]?.date : null].filter(Boolean).sort();
+  const due = dates[0];
+  return { label: !due ? "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0448\u0430\u0433 \u043D\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D" : due < TODAY ? "\u041F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E" : due === TODAY ? "\u0421\u0435\u0433\u043E\u0434\u043D\u044F" : "\u0417\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u043E", due, reminder: open[0] };
+}
+function saveReminder(r, cid, text, due) {
+  const c = r.cases.find((c2) => c2.id === cid);
+  if (!c || c.stage === "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E") throw Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0443\u044E\u0449\u0435\u0435 \u0434\u0435\u043B\u043E");
+  if (!text?.trim() || !dateValid(due) || due < TODAY) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0438 \u0434\u0430\u0442\u0443 \u043D\u0435 \u0440\u0430\u043D\u044C\u0448\u0435 \u0434\u0430\u0442\u044B \u043A\u0430\u0431\u0438\u043D\u0435\u0442\u0430");
+  c.reminders ||= [];
+  c.reminders.push({ id: crypto.randomUUID(), text: text.trim(), due, status: "open", owner: r.owner, created: TODAY });
+  audit(r, "\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435 \u043F\u043E \u0434\u0435\u043B\u0443", `${c.id}: ${text.trim()} / ${due}`);
+}
+function closeReminder(r, cid, id) {
+  const t = r.cases.find((c) => c.id === cid)?.reminders?.find((t2) => t2.id === id);
+  if (!t || t.status !== "open") throw Error("\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E");
+  t.status = "done";
+  t.completed = TODAY;
+  audit(r, "\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E", t.text);
+}
+var MANUAL_STAGES = ["\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435", "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435", "\u041F\u0440\u0438\u043A\u0430\u0437", "\u0418\u0441\u043A", "\u041F\u0440\u0438\u0441\u0442\u0430\u0432\u044B", "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E"];
+function moveCases(rows, targets, stage, reason) {
+  if (!MANUAL_STAGES.includes(stage) || !reason?.trim() || !targets.length) throw Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u043B\u0430, \u0441\u0442\u0430\u0434\u0438\u044E \u0438 \u043E\u0441\u043D\u043E\u0432\u0430\u043D\u0438\u0435");
+  const copy = structuredClone(rows), unique = [...new Set(targets.map((x) => JSON.stringify(x)))];
+  for (const key of unique) {
+    const [rid, cid] = JSON.parse(key), r = copy.find((r2) => r2.id === rid), c = r?.cases.find((c2) => c2.id === cid);
+    if (!c || c.stage === "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E" || c.stage === stage) throw Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0443\u044E\u0449\u0435\u0435 \u0434\u0435\u043B\u043E \u043D\u0430 \u0434\u0440\u0443\u0433\u043E\u0439 \u0441\u0442\u0430\u0434\u0438\u0438");
+    selectCase(r, cid);
+    if (stage === "\u041F\u0440\u0438\u0441\u0442\u0430\u0432\u044B" && (c.legal?.status === "\u041E\u0442\u043C\u0435\u043D\u0451\u043D \u043F\u0440\u0438\u043A\u0430\u0437" || !c.documents?.some((d) => !d.archived && ["order", "enforcement"].includes(d.kind)))) throw Error("\u0414\u043B\u044F \u0438\u0441\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F \u043D\u0443\u0436\u0435\u043D \u0434\u0435\u0439\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0439 \u0438\u0441\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u0434\u043E\u043A\u0443\u043C\u0435\u043D\u0442");
+    if (stage === "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E" && !c.balanceConfirmed) throw Error("\u0414\u043B\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0438\u044F \u043D\u0443\u0436\u0435\u043D \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0439 \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u0434\u0435\u043B\u0430");
+    const old = c.stage;
+    changeStage(r, stage, reason);
+    c.stageHistory ||= [];
+    c.stageHistory.push({ stage: old, at: TODAY, reason });
+    c.legalHistory ||= [];
+    if (c.legal?.status) c.legalHistory.push({ ...c.legal, ended: TODAY });
+    c.legal = {};
+    c.packageRevisionNeeded = false;
+    c.manualStatus = null;
+    audit(r, "\u041F\u0435\u0440\u0435\u043D\u043E\u0441 \u0434\u0435\u043B\u0430", `${c.id}: ${old} \u2192 ${stage}. ${reason}`);
+  }
+  return copy;
+}
+
 // dist/documents.mjs
 var DOCUMENTS = {
   notice: { title: "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435 \u043E \u0437\u0430\u0434\u043E\u043B\u0436\u0435\u043D\u043D\u043E\u0441\u0442\u0438", stages: ["\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435"] },
@@ -876,14 +1055,11 @@ function accountingAction(rec, role2) {
 function roleRecommendation(r, role2) {
   const scope = r._caseView ? r : workRecord(r);
   if (role2 === "lawyer" && scope.stage === "\u0411\u0435\u0437 \u0434\u0435\u043B\u0430" && !scope.caseId) {
-    const rec2 = recommendation(scope);
-    if (rec2.key === "waiting") return { ...rec2, label: "\u0421\u0432\u0435\u0440\u0438\u0442\u044C. \u041F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0439 \u0434\u043E\u043B\u0433 \u043D\u0430 \u041B\u0421", action: "reviewStatus" };
-    if (["caseBalance", "reconcile", "stale", "dispute"].includes(rec2.key)) return { ...rec2, label: "\u0417\u0430\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u0443 \u0440\u0430\u0441\u0447\u0451\u0442\u0447\u0438\u043A\u0430 \u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u0438\u0435", action: "review" };
-    return { key: "new", label: "\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u0438\u0442\u044C \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435", detail: "\u0414\u043E\u043B\u0433 \u044D\u0442\u043E\u0433\u043E \u043F\u0435\u0440\u0438\u043E\u0434\u0430 \u0435\u0449\u0451 \u043D\u0435 \u0432\u043A\u043B\u044E\u0447\u0451\u043D \u0432 \u0434\u0435\u043B\u043E.", action: "channels", tone: "pink" };
+    return noCaseAssessment(scope) || { key: "none", label: "", detail: "\u0414\u043E\u043B\u0433\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B \u043D\u0435\u0442.", action: "data", blocked: true, tone: "neutral" };
   }
   const rec = recommendation(r), accounting = accountingAction(rec, role2);
   if (accounting) return { ...rec, ...accounting };
-  if (role2 === "accountant") return { ...rec, label: "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435 \u0438 \u0440\u0430\u0441\u0447\u0451\u0442", action: "data", detail: `\u041E\u0441\u0442\u0430\u0442\u043E\u043A \u043D\u0430 ${r.asOf}. \u0420\u0430\u0431\u043E\u0442\u0430 \u0441 \u043D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u044F\u043C\u0438 \u0438 \u043E\u043F\u043B\u0430\u0442\u0430\u043C\u0438.` };
+  if (role2 === "accountant") return { ...rec, label: "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0431\u0430\u043B\u0430\u043D\u0441 \u0438 \u0438\u0441\u0442\u043E\u0440\u0438\u044E", action: "data", detail: `\u041E\u0441\u0442\u0430\u0442\u043E\u043A \u043D\u0430 ${r.asOf}. \u0420\u0430\u0431\u043E\u0442\u0430 \u0441 \u043D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u044F\u043C\u0438 \u0438 \u043E\u043F\u043B\u0430\u0442\u0430\u043C\u0438.` };
   return rec;
 }
 function roleCaseProgress(c, r, role2) {
@@ -891,96 +1067,11 @@ function roleCaseProgress(c, r, role2) {
   const rec = r && recommendation({ ...r, caseId: c?.id || null, stage: c?.stage || "\u0411\u0435\u0437 \u0434\u0435\u043B\u0430", _caseView: true });
   const accounting = rec && accountingAction(rec, role2);
   if (p.dataIssue && accounting) return { ...p, next: accounting.label, work: accounting.action };
-  if (role2 === "accountant") return { ...p, next: "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435 \u0438 \u0440\u0430\u0441\u0447\u0451\u0442", work: "data" };
+  if (role2 === "accountant") return { ...p, next: "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0431\u0430\u043B\u0430\u043D\u0441 \u0438 \u0438\u0441\u0442\u043E\u0440\u0438\u044E", work: "data" };
   return p;
 }
 function visibleStages(rows) {
   return STAGES.filter((stage) => stage !== "\u0421\u0443\u0434: \u0443\u0442\u043E\u0447\u043D\u0438\u0442\u044C" || rows.some((r) => r.cases?.some((c) => c.stage === stage)));
-}
-
-// dist/operations.mjs
-function dateValid(x) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(x || "") && Number.isFinite(Date.parse(x)) && new Date(x).toISOString().slice(0, 10) === x;
-}
-function audit(r, label, note) {
-  r.events.unshift({ id: crypto.randomUUID(), at: `${TODAY}T12:00:00`, action: "work", label, status: "\u0423\u0447\u0442\u0435\u043D\u043E \u0432 \u0434\u0435\u043C\u043E", note, caseId: r.caseId });
-}
-function requestReview(r, due, reason) {
-  if (!dateValid(due) || due < TODAY || !reason.trim()) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043F\u0440\u0438\u0447\u0438\u043D\u0443 \u0438 \u0441\u0440\u043E\u043A \u0441\u0432\u0435\u0440\u043A\u0438");
-  if (r.reviewTask?.status === "open") throw Error("\u0417\u0430\u043F\u0440\u043E\u0441 \u0443\u0436\u0435 \u043F\u0435\u0440\u0435\u0434\u0430\u043D \u0431\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438");
-  r.reviewTask = { due, reason: reason.trim(), status: "open", owner: "\u0411\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u044F" };
-  audit(r, "\u041F\u0435\u0440\u0435\u0434\u0430\u043D\u043E \u0431\u0443\u0445\u0433\u0430\u043B\u0442\u0435\u0440\u0438\u0438", reason);
-}
-function resolveReview(r, note) {
-  if (!note.trim()) throw Error("\u041E\u043F\u0438\u0448\u0438\u0442\u0435 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0441\u0432\u0435\u0440\u043A\u0438");
-  if (!r.reviewTask || r.reviewTask.status !== "open") throw Error("\u041D\u0435\u0442 \u043E\u0442\u043A\u0440\u044B\u0442\u043E\u0433\u043E \u0437\u0430\u043F\u0440\u043E\u0441\u0430");
-  if (r.caseBalanceConflict || r.unallocated > 0 || days(r.asOf) > 7 || r.disputed) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0443\u0441\u0442\u0440\u0430\u043D\u0438\u0442\u0435 \u043F\u0440\u0438\u0447\u0438\u043D\u0443: \u043E\u043F\u043B\u0430\u0442\u0430, \u043E\u0441\u0442\u0430\u0442\u043A\u0438 \u0434\u0435\u043B, \u0441\u043F\u043E\u0440 \u0438\u043B\u0438 \u0443\u0441\u0442\u0430\u0440\u0435\u0432\u0448\u0438\u0439 \u0440\u0435\u0435\u0441\u0442\u0440");
-  r.reviewTask.status = "done";
-  r.reviewTask.result = note;
-  audit(r, "\u0421\u0432\u0435\u0440\u043A\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430", note);
-}
-function saveLegal(r, input) {
-  const c = currentCase(r);
-  if (!c) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0437\u0434\u0430\u0439\u0442\u0435 \u0434\u0435\u043B\u043E");
-  if (!input.number.trim() || !dateValid(input.date) || input.date > TODAY || !dateValid(input.nextDate) || input.nextDate < TODAY || !input.next.trim()) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043D\u043E\u043C\u0435\u0440, \u0434\u0430\u0442\u0443 \u0434\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u0430, \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0438 \u0441\u0440\u043E\u043A");
-  c.legal = { ...c.legal, ...input };
-  r.next = input.next;
-  r.nextDate = input.nextDate;
-  r.task = { text: input.next, due: input.nextDate, owner: r.owner, status: "open" };
-  audit(r, "\u0420\u0435\u043A\u0432\u0438\u0437\u0438\u0442\u044B \u0434\u0435\u043B\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u044B", `${input.number} \xB7 ${input.status}`);
-}
-function saveAgreement(r, number, date2, schedule) {
-  const c = currentCase(r);
-  if (!c) throw Error("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0441\u043E\u0437\u0434\u0430\u0439\u0442\u0435 \u0434\u0435\u043B\u043E");
-  if (!number.trim() || !dateValid(date2) || date2 > TODAY) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u043D\u043E\u043C\u0435\u0440 \u0438 \u0434\u0430\u0442\u0443 \u0441\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u044F");
-  if (!schedule.length || schedule.some((s) => !dateValid(s.date) || s.date < date2 || !Number.isSafeInteger(s.amount) || s.amount <= 0)) throw Error("\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u0434\u0430\u0442\u044B \u0438 \u0441\u0443\u043C\u043C\u044B \u0433\u0440\u0430\u0444\u0438\u043A\u0430");
-  if (schedule.reduce((a, s) => a + s.amount, 0) !== amount(c.remaining)) throw Error("\u0413\u0440\u0430\u0444\u0438\u043A \u0434\u043E\u043B\u0436\u0435\u043D \u043F\u043E\u043A\u0440\u044B\u0432\u0430\u0442\u044C \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u0434\u0435\u043B\u0430");
-  if (!c.documents.some((d) => d.kind === "agreement" && !d.archived)) throw Error("\u041F\u0440\u0438\u043A\u0440\u0435\u043F\u0438\u0442\u0435 \u0444\u0430\u0439\u043B \u043F\u043E\u0434\u043F\u0438\u0441\u0430\u043D\u043D\u043E\u0433\u043E \u0441\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u044F");
-  c.agreement = { number: number.trim(), date: date2 };
-  c.schedule = schedule.sort((a, b) => a.date.localeCompare(b.date));
-  if (c.stage !== "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435") c.stageEnteredAt = TODAY;
-  c.stage = "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435";
-  r.stage = c.stage;
-  r.promise = null;
-  r.task = null;
-  audit(r, "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435 \u0438 \u0433\u0440\u0430\u0444\u0438\u043A \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u044B", number);
-}
-function markInstallment(r, index, paymentIndexes) {
-  const c = currentCase(r), s = c?.schedule[index];
-  if (!s || s.paid) throw Error("\u041F\u043B\u0430\u0442\u0451\u0436 \u0443\u0436\u0435 \u043E\u0442\u043C\u0435\u0447\u0435\u043D \u0438\u043B\u0438 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D");
-  const chosen = [...new Set(paymentIndexes)];
-  if (!chosen.length || chosen.some((i) => !r.payments[i] || r.payments[i].caseId !== c.id)) throw Error("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0443\u0447\u0442\u0451\u043D\u043D\u044B\u0435 \u043F\u043B\u0430\u0442\u0435\u0436\u0438 \u0438\u043C\u0435\u043D\u043D\u043E \u044D\u0442\u043E\u0433\u043E \u0434\u0435\u043B\u0430");
-  if (c.schedule.some((x) => x.paid && x.paymentIds?.some((id) => chosen.some((i) => r.payments[i].id === id)))) throw Error("\u041F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u0435 \u0443\u0436\u0435 \u0441\u0432\u044F\u0437\u0430\u043D\u043E \u0441 \u0434\u0440\u0443\u0433\u0438\u043C \u043F\u043B\u0430\u0442\u0435\u0436\u043E\u043C \u0433\u0440\u0430\u0444\u0438\u043A\u0430");
-  if (chosen.reduce((sum2, i) => sum2 + r.payments[i].amount, 0) !== s.amount) throw Error("\u0421\u0443\u043C\u043C\u0430 \u043F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u0439 \u0434\u043E\u043B\u0436\u043D\u0430 \u0441\u043E\u0432\u043F\u0430\u0441\u0442\u044C \u0441 \u043F\u043B\u0430\u0442\u0435\u0436\u043E\u043C \u0433\u0440\u0430\u0444\u0438\u043A\u0430");
-  for (const i of chosen) r.payments[i].id ||= crypto.randomUUID();
-  s.paid = true;
-  s.paymentIds = chosen.map((i) => r.payments[i].id);
-  audit(r, "\u041F\u043B\u0430\u0442\u0451\u0436 \u0433\u0440\u0430\u0444\u0438\u043A\u0430 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D", s.date);
-}
-function saveOwners(r, list) {
-  if (!list.length || list.some((o) => !o.name.trim() || !Number.isFinite(o.share) || o.share <= 0 || o.share > 100) || Math.abs(list.reduce((s, o) => s + o.share, 0) - 100) > 1e-3) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u043E\u0432; \u0441\u0443\u043C\u043C\u0430 \u0434\u043E\u043B\u0435\u0439 \u0434\u043E\u043B\u0436\u043D\u0430 \u0431\u044B\u0442\u044C 100%");
-  r.owners = list;
-  audit(r, "\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u0443\u0442\u043E\u0447\u043D\u0435\u043D\u044B", "\u0414\u043E\u043B\u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u0435\u043D\u044B");
-}
-function validateMonthly(rows) {
-  const seen = /* @__PURE__ */ new Set();
-  return rows.map((x) => {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(x.month) || seen.has(x.month)) throw Error("\u041F\u0435\u0440\u0438\u043E\u0434\u044B: \u0413\u0413\u0413\u0413-\u041C\u041C, \u0431\u0435\u0437 \u0434\u0443\u0431\u043B\u0435\u0439");
-    seen.add(x.month);
-    const v = { month: x.month, area: Number(x.area), formula: String(x.formula || "").trim(), opening: cents(x.opening), charges: cents(x.charges), payments: cents(x.payments), closing: cents(x.closing) };
-    if (!Number.isFinite(v.area) || v.area <= 0 || !v.formula || v.opening + v.charges - v.payments !== v.closing) throw Error(`\u041F\u0440\u043E\u0432\u0435\u0440\u044C\u0442\u0435 \u043F\u043B\u043E\u0449\u0430\u0434\u044C, \u0444\u043E\u0440\u043C\u0443\u043B\u0443 \u0438 \u0431\u0430\u043B\u0430\u043D\u0441 \u0437\u0430 ${x.month}`);
-    return v;
-  }).sort((a, b) => a.month.localeCompare(b.month));
-}
-function saveMonthly(r, input) {
-  const rows = validateMonthly(input);
-  if (!rows.length || rows.at(-1).closing !== r.principal) throw Error("\u0418\u0442\u043E\u0433 \u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0433\u043E \u0434\u043E\u043B\u0433\u0430 \u0434\u043E\u043B\u0436\u0435\u043D \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0442\u044C \u0441 \u0442\u0435\u043A\u0443\u0449\u0438\u043C \u0440\u0435\u0435\u0441\u0442\u0440\u043E\u043C");
-  for (let i = 1; i < rows.length; i++) if (rows[i].opening !== rows[i - 1].closing) throw Error("\u041D\u0430\u0447\u0430\u043B\u044C\u043D\u044B\u0439 \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u043D\u0435 \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u0441 \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0438\u043C \u043C\u0435\u0441\u044F\u0446\u0435\u043C");
-  r.charges = rows;
-  audit(r, "\u0420\u0430\u0441\u0447\u0451\u0442 \u0437\u0430\u0434\u043E\u043B\u0436\u0435\u043D\u043D\u043E\u0441\u0442\u0438 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D", `${rows.length} \u043C\u0435\u0441\u044F\u0446\u0435\u0432; \u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0434\u043E\u043B\u0433 \u0441\u0432\u0435\u0440\u0451\u043D`);
-}
-function packetFiles(state2, r) {
-  return [...state2.houseDocuments?.[JSON.stringify([r.company, r.building])] || [], ...currentCase(r)?.documents || []];
 }
 
 // dist/demo-billing.mjs
@@ -1280,20 +1371,13 @@ function caseNotices(r, c) {
 var $ = (s) => document.querySelector(s);
 var labels = { principal: "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0434\u043E\u043B\u0433", penalty: "\u041F\u0435\u043D\u0438", fee: "\u0413\u043E\u0441\u043F\u043E\u0448\u043B\u0438\u043D\u0430" };
 var choose = (arr, value) => arr.map((x) => `<option value="${esc(x)}" ${value === x ? "selected" : ""}>${esc(x)}</option>`).join("");
-function demoControls(r, role2) {
-  if (!r.billing) return "";
-  const c = currentCase(r);
-  return `<section class="case-section"><h3>\u0423\u0447\u0435\u0431\u043D\u044B\u0435 \u0441\u043E\u0431\u044B\u0442\u0438\u044F</h3><div class="action-row">${role2 === "accountant" ? `<button class="button secondary small" data-work="demo:halfPayment" data-id="${r.id}">\u041F\u043E\u0441\u0442\u0443\u043F\u0438\u043B\u0430 \u0447\u0430\u0441\u0442\u044C \u043E\u043F\u043B\u0430\u0442\u044B</button><button class="button secondary small" data-work="demo:fullPayment" data-id="${r.id}">\u041F\u043E\u0441\u0442\u0443\u043F\u0438\u043B\u0430 \u043F\u043E\u043B\u043D\u0430\u044F \u043E\u043F\u043B\u0430\u0442\u0430</button>${r.houseStatus !== "departed" ? `<button class="button secondary small" data-work="demo:newMonth" data-id="${r.id}">\u041F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u043D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u044F \u0437\u0430 \u043E\u043A\u0442\u044F\u0431\u0440\u044C</button>` : ""}` : `${c && ["\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435", "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435"].includes(c.stage) ? `<button class="button secondary small" data-work="demo:agreement" data-id="${r.id}">\u041F\u043E\u043B\u0443\u0447\u0435\u043D\u043E \u043F\u043E\u0434\u043F\u0438\u0441\u0430\u043D\u043D\u043E\u0435 \u0441\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435</button>` : ""}${c?.stage === "\u041F\u0440\u0438\u043A\u0430\u0437" ? `<button class="button secondary small" data-work="demo:execution" data-id="${r.id}">\u041F\u0440\u0435\u0434\u044A\u044F\u0432\u0438\u0442\u044C \u043F\u0440\u0438\u043A\u0430\u0437 \u0432 \u0431\u0430\u043D\u043A</button>` : ""}`}<small>\u0422\u043E\u043B\u044C\u043A\u043E \u0443\u0447\u0435\u0431\u043D\u044B\u0439 \u043A\u043E\u043D\u0442\u0443\u0440. \u0412\u043D\u0435\u0448\u043D\u0438\u0445 \u043E\u0442\u043F\u0440\u0430\u0432\u043E\u043A \u043D\u0435\u0442.</small></div></section>`;
-}
-function billingTable(r) {
-  const c = currentCase(r), lines = c ? billingLines(r, c.id) : billingLines(r);
-  return `<h3>${c ? "\u0420\u0430\u0441\u0447\u0451\u0442 \u043F\u043E \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u043C\u0443 \u0434\u0435\u043B\u0443" : "\u0420\u0430\u0441\u0447\u0451\u0442 \u0434\u043E\u043B\u0433\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B"}</h3><p>\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: \u0443\u0447\u0435\u0431\u043D\u044B\u0439 \u0431\u0438\u043B\u043B\u0438\u043D\u0433 \xB7 ${esc(r.billing.asOf)} \xB7 \u043F\u043B\u043E\u0449\u0430\u0434\u044C ${r.billing.area} \u043C\xB2</p><div class="table-frame"><table class="billing-table"><thead><tr><th>\u041C\u0435\u0441\u044F\u0446 / \u0443\u0441\u043B\u0443\u0433\u0430</th><th>\u0420\u0430\u0441\u0447\u0451\u0442</th><th>\u041D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u043E</th><th>\u041E\u043F\u043B\u0430\u0447\u0435\u043D\u043E</th><th>\u0414\u043E\u043B\u0433</th><th>\u041F\u0435\u043D\u0438</th></tr></thead><tbody>${lines.map((x) => `<tr><td data-label="\u041C\u0435\u0441\u044F\u0446 / \u0443\u0441\u043B\u0443\u0433\u0430">${esc(x.month)}<small>${esc(x.service)}</small></td><td data-label="\u0420\u0430\u0441\u0447\u0451\u0442">${esc(x.formula)}</td><td data-label="\u041D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u043E">${money(x.charged)}</td><td data-label="\u041E\u043F\u043B\u0430\u0447\u0435\u043D\u043E">${money(x.paid)}</td><td data-label="\u0414\u043E\u043B\u0433">${money(principalDue(x))}</td><td data-label="\u041F\u0435\u043D\u0438">${money(penaltyDue(x))}</td></tr>`).join("")}</tbody></table></div><p>\u041F\u0440\u0435\u0434\u043B\u0430\u0433\u0430\u0435\u043C\u044B\u0439 \u043F\u0435\u0440\u0438\u043E\u0434 \u043D\u043E\u0432\u043E\u0433\u043E \u0434\u0435\u043B\u0430: ${esc(billingPeriod(billingLines(r)) || "\u041D\u0435\u0442 \u0434\u043E\u043B\u0433\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B")}.</p>`;
-}
 function queueOverview(rows) {
   return `<section class="work-overview"><div class="section-head"><h2>\u0421 \u043A\u0435\u043C \u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \u0441\u0435\u0439\u0447\u0430\u0441</h2></div><div class="work-queues">${Object.entries(QUEUES).map(([key, label]) => `<button data-queue="${key}" class="work-queue ${key === "overdue" ? "urgent" : ""}"><span>${label}</span><strong>${workRows(rows, { queue: key }).length}</strong>${icon("arrow-up-right")}</button>`).join("")}</div></section>`;
 }
 function nextAction(r, role2) {
   const rec = roleRecommendation({ ...r, _caseView: true }, role2), c = currentCase(r);
+  if (rec.blocked) return `<section class="case-section"><p class="notice">${esc(rec.detail)}</p><button class="button secondary" data-work="data" data-id="${r.id}">\u0411\u0430\u043B\u0430\u043D\u0441 \u0438 \u0438\u0441\u0442\u043E\u0440\u0438\u044F</button></section>`;
+  if (rec.key === "repeatDebt") return `<section class="next-action"><h3>${esc(rec.label)}</h3><p>${esc(rec.detail)}</p><button class="button" data-debt-spec="repeat" data-row="${r.id}">\u0421\u0432\u0435\u0440\u0438\u0442\u044C \u043F\u0435\u0440\u0438\u043E\u0434\u044B \u0438 \u0441\u0443\u043C\u043C\u044B</button></section>`;
   if (role2 === "lawyer" && c && (rec.key === "agreement" || rec.key === "follow" && ["\u041F\u0440\u0438\u043A\u0430\u0437", "\u0418\u0441\u043A", "\u041F\u0440\u0438\u0441\u0442\u0430\u0432\u044B"].includes(c.stage))) return "";
   let action = rec.action, label = rec.label;
   if (role2 === "lawyer") {
@@ -1342,10 +1426,8 @@ function legalPanel(r) {
   ${clock}${c.stage === "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435" && c.agreement ? `<p>\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435 ${esc(c.agreement.number)} \u043E\u0442 ${esc(c.agreement.date)}</p>` : ""}${c.stage === "\u0421\u043E\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435" && c.schedule.length ? `<table><thead><tr><th>\u0414\u0430\u0442\u0430</th><th>\u041F\u043B\u0430\u0442\u0451\u0436</th><th>\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442</th></tr></thead><tbody>${c.schedule.map((x, i) => `<tr><td>${esc(x.date)}</td><td>${money(x.amount)}</td><td>${!c.agreement ? "\u041F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u043E, \u043D\u0435 \u043F\u043E\u0434\u043F\u0438\u0441\u0430\u043D\u043E" : x.paid ? "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D" : `<button class="button ghost small" data-work="installment" data-index="${i}" data-id="${r.id}">${x.date < TODAY ? "\u041F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D: \u0441\u0432\u0435\u0440\u0438\u0442\u044C" : "\u0421\u0432\u044F\u0437\u0430\u0442\u044C \u0441 \u043E\u043F\u043B\u0430\u0442\u043E\u0439"}</button>`}</td></tr>`).join("")}</tbody></table>` : ""}</section>`;
 }
 function dataPanel(r) {
-  if (r.billing) return `<section class="case-section"><h3>\u0414\u0430\u043D\u043D\u044B\u0435 \u0438\u0437 \u0443\u0447\u0435\u0431\u043D\u043E\u0433\u043E \u0431\u0438\u043B\u043B\u0438\u043D\u0433\u0430</h3>${r.owners.map((o) => `<p>${esc(o.name)} \xB7 \u0434\u043E\u043B\u044F ${o.share}%</p>`).join("")}<p>${r.houseStatus === "departed" ? `\u0414\u043E\u043C \u0432\u044B\u0431\u044B\u043B \u0438\u0437 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F ${esc(r.contractEnd)}. \u0421\u0442\u0430\u0440\u044B\u0439 \u0434\u043E\u043B\u0433 \u043E\u0441\u0442\u0430\u0451\u0442\u0441\u044F \u0432 \u0440\u0430\u0431\u043E\u0442\u0435.` : "\u0414\u043E\u043C \u0432 \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0438"}</p>${billingTable(r)}<h3>\u0421\u0432\u044F\u0437\u0430\u043D\u043D\u044B\u0435 \u043B\u0438\u0446\u0435\u0432\u044B\u0435 \u0441\u0447\u0435\u0442\u0430</h3>${r.ownerHistory.map((x) => `<p>${esc(x.name)} \xB7 \u041B\u0421 ${esc(x.account)} \xB7 ${esc(x.reason)}</p>`).join("") || "<p>\u0421\u0432\u044F\u0437\u0430\u043D\u043D\u044B\u0445 \u041B\u0421 \u043D\u0435\u0442.</p>"}</section>`;
-  return `<section class="case-section"><h3>\u0414\u0430\u043D\u043D\u044B\u0435 \u0434\u043E\u043B\u0436\u043D\u0438\u043A\u0430</h3>${r.owners.length ? r.owners.map((o) => `<p>${esc(o.name)} \xB7 ${o.share}%</p>`).join("") : "<p>\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u0438 \u0434\u043E\u043B\u0438 \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B. \u041D\u0435 \u043F\u043E\u0434\u0441\u0442\u0430\u0432\u043B\u044F\u0435\u043C \u0434\u0430\u043D\u043D\u044B\u0435 \u0438\u0437 \u0430\u0434\u0440\u0435\u0441\u0430.</p>"}<button class="button secondary small" data-work="owners" data-id="${r.id}">\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u0438 \u0434\u043E\u043B\u0438</button>
-  <h3>\u041F\u043E\u043C\u0435\u0441\u044F\u0447\u043D\u044B\u0439 \u0440\u0430\u0441\u0447\u0451\u0442</h3>${r.charges.length ? `<div class="table-frame"><table><thead><tr><th>\u041C\u0435\u0441\u044F\u0446</th><th>\u041F\u043B\u043E\u0449\u0430\u0434\u044C / \u0444\u043E\u0440\u043C\u0443\u043B\u0430</th><th>\u041D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u043E</th><th>\u041E\u043F\u043B\u0430\u0447\u0435\u043D\u043E</th><th>\u041E\u0441\u0442\u0430\u0442\u043E\u043A</th></tr></thead><tbody>${r.charges.map((x) => `<tr><td>${esc(x.month)}</td><td>${x.area} \u043C\xB2<small>${esc(x.formula)}</small></td><td>${money(x.charges)}</td><td>${money(x.payments)}</td><td>${money(x.closing)}</td></tr>`).join("")}</tbody></table></div>` : "<p>\u0420\u0435\u0435\u0441\u0442\u0440 \u043E\u0441\u0442\u0430\u0442\u043A\u043E\u0432 \u043D\u0435 \u0441\u043E\u0434\u0435\u0440\u0436\u0438\u0442 \u043F\u043E\u043C\u0435\u0441\u044F\u0447\u043D\u044B\u0445 \u043D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u0439. \u041D\u0443\u0436\u0435\u043D \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u0440\u0430\u0441\u0447\u0451\u0442 \u0438\u0437 \u0431\u0438\u043B\u043B\u0438\u043D\u0433\u0430.</p>"}<button class="button secondary small" data-work="monthly" data-id="${r.id}">\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044C \u0440\u0430\u0441\u0447\u0451\u0442</button>
-  <h3>\u0421\u0432\u044F\u0437\u0430\u043D\u043D\u044B\u0435 \u043B\u0438\u0446\u0435\u0432\u044B\u0435 \u0441\u0447\u0435\u0442\u0430</h3>${r.ownerHistory.map((x) => `<p>\u041F\u0440\u0435\u0436\u043D\u0438\u0439 \u0432\u043B\u0430\u0434\u0435\u043B\u0435\u0446: ${esc(x.name)} \xB7 \u041B\u0421 ${esc(x.account)} \xB7 ${esc(x.reason)}</p>`).join("")}<button class="button secondary small" data-work="previous" data-id="${r.id}">\u0421\u0432\u044F\u0437\u0430\u0442\u044C \u043F\u0440\u0435\u0436\u043D\u0438\u0439 \u041B\u0421</button></section>`;
+  const c = currentCase(r), balance = c?.remaining || unassigned(r), history = r.charges || [];
+  return `<section class="case-section"><h3>\u0411\u0430\u043B\u0430\u043D\u0441 \u0438 \u0438\u0441\u0442\u043E\u0440\u0438\u044F</h3><p>\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: ${esc(r.source)} \xB7 \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u043D\u0430 ${esc(r.asOf)}</p><p>\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0434\u043E\u043B\u0433: ${money(balance.principal)} \xB7 \u043F\u0435\u043D\u0438 \u0438\u0437 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0430: ${money(balance.penalty)} \xB7 \u043F\u043E\u0448\u043B\u0438\u043D\u0430: ${money(balance.fee)}</p><h3>\u041D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u044F \u0438 \u043E\u043F\u043B\u0430\u0442\u044B \u0438\u0437 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0430</h3>${history.length ? `<div class="table-frame"><table><thead><tr><th>\u041C\u0435\u0441\u044F\u0446</th><th>\u041D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u043E</th><th>\u041E\u043F\u043B\u0430\u0447\u0435\u043D\u043E</th><th>\u041E\u0441\u0442\u0430\u0442\u043E\u043A</th></tr></thead><tbody>${history.map((x) => `<tr><td>${esc(x.month)}</td><td>${money(x.charges)}</td><td>${money(x.payments)}</td><td>${money(x.closing)}</td></tr>`).join("")}</tbody></table></div>` : "<p>\u041F\u043E\u043C\u0435\u0441\u044F\u0447\u043D\u0430\u044F \u0438\u0441\u0442\u043E\u0440\u0438\u044F \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u0430 \u0438\u0437 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0430.</p>"}<h3>\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u0438 \u0434\u043E\u043B\u0438</h3>${r.owners.map((o) => `<p>${esc(o.name)} \xB7 ${o.share}%</p>`).join("") || "<p>\u0414\u0430\u043D\u043D\u044B\u0435 \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u043E\u0432 \u043D\u0435 \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u044B</p>"}<p>\u041D\u0430\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u044F \u0438 \u043F\u0435\u043D\u0438 \u043F\u043E\u0441\u0442\u0443\u043F\u0430\u044E\u0442 \u0438\u0437 \u0431\u0438\u043B\u043B\u0438\u043D\u0433\u0430. \u0412 \u043C\u043E\u0434\u0443\u043B\u0435 \u0432\u0437\u044B\u0441\u043A\u0430\u043D\u0438\u0439 \u043E\u043D\u0438 \u043D\u0435 \u0440\u0430\u0441\u0441\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F.</p></section>`;
 }
 function documentsPanel(state2, r) {
   const c = currentCase(r), key = JSON.stringify([r.company, r.building]);
@@ -1752,6 +1834,10 @@ function previewNotifications(rows, targets, channel = "app") {
       const matching = r.events.filter((e) => e.caseId === caseId && e.status !== "\u041F\u043E\u0434\u0433\u043E\u0442\u043E\u0432\u043B\u0435\u043D\u043E (\u0434\u0435\u043C\u043E)");
       reason = eligible({ ...r, events: matching }, channel);
       if (reason) throw Error(reason);
+      if (!caseId) {
+        const a = noCaseAssessment(r);
+        if (!a || a.key !== "new") throw Error(a?.detail || "\u0414\u043E\u043B\u0433\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B \u043D\u0435\u0442");
+      }
       if (!caseId) createCase(r, r.billing ? billingPeriod(billingLines(r)) : r.period, unassigned(r));
       if (amount(currentCase(r).remaining) <= 0) throw Error("\u041F\u043E \u0434\u0435\u043B\u0443 \u043D\u0435\u0442 \u0437\u0430\u0434\u043E\u043B\u0436\u0435\u043D\u043D\u043E\u0441\u0442\u0438");
       doc = ensureDocument(r, channel === "receipt" ? "demand" : "notice");
@@ -1864,7 +1950,8 @@ function installInteractions({ getState, getRole, modal: modal2, save: save2, re
       <div class="delivery-list">${p.items.map((x, i) => `<button class="delivery-item ${i === index ? "active" : ""}" data-flow-preview="${i}"><strong>${esc(NOTIFICATION_CHANNELS[x.channel])} \xB7 \u041B\u0421 ${esc(x.account)}</strong><small>${esc(x.address)} \xB7 ${esc(x.reason || "\u0413\u043E\u0442\u043E\u0432\u043E \u043A \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0435 / \u043F\u0435\u0447\u0430\u0442\u0438")}</small></button>`).join("")}</div>
       ${item?.doc ? `<h3>${item.channel === "robot" ? "\u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0439 \u043E\u0431\u0437\u0432\u043E\u043D\u0430" : item.channel === "notice" || item.channel === "receipt" ? "\u041F\u0435\u0447\u0430\u0442\u043D\u044B\u0439 \u0434\u043E\u043A\u0443\u043C\u0435\u043D\u0442" : "\u0422\u0435\u043A\u0441\u0442 \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F"} \xB7 \u041B\u0421 ${esc(item.account)}</h3><pre class="document-preview">${esc(notificationMessage(item, item.channel))}</pre>` : "<p>\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043A\u0430\u043D\u0430\u043B\u044B. \u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0438 \u0431\u0443\u0434\u0443\u0442 \u043F\u0440\u043E\u043F\u0443\u0449\u0435\u043D\u044B \u0441 \u0443\u043A\u0430\u0437\u0430\u043D\u043D\u043E\u0439 \u043F\u0440\u0438\u0447\u0438\u043D\u043E\u0439.</p>"}
       ${item?.channel === "receipt" && selectedCase ? receiptPages({ ...selectedRow, ...selectedCase.remaining, period: selectedCase.period }) : ""}
-      <p class="form-note">\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435 \u043E \u0434\u043E\u043B\u0433\u0435, \u043D\u0435 \u0432\u0435\u0441\u044C \u043F\u0430\u043A\u0435\u0442 \u0434\u0435\u043B\u0430. \u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430, \u043F\u0435\u0447\u0430\u0442\u044C \u0438 \u0434\u043E\u0441\u0442\u0430\u0432\u043A\u0430 \u0443\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E. \u0422\u043E\u043B\u044C\u043A\u043E \u0442\u0435\u0441\u0442\u043E\u0432\u044B\u0435 \u043F\u043E\u043B\u0443\u0447\u0430\u0442\u0435\u043B\u0438.</p><div id="flowError"></div>`,
+      ${selectedCase ? `<h3>\u0414\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u044B \u0441\u0442\u0430\u0434\u0438\u0438 \xAB\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435\xBB</h3><ul>${availableTemplates(selectedCase).map(([k, d]) => `<li>${esc(d.title)}${item?.doc?.kind === k ? " \u2014 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0435\u0442\u0441\u044F \u0434\u043B\u044F \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u043A\u0430\u043D\u0430\u043B\u0430" : ""}</li>`).join("")}</ul><p>\u0414\u043E\u043A\u0443\u043C\u0435\u043D\u0442 \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u0433\u043E \u043A\u0430\u043D\u0430\u043B\u0430 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u044F. \u041E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0448\u0430\u0431\u043B\u043E\u043D\u044B \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u0432 \u0434\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u0430\u0445 \u0441\u043E\u0437\u0434\u0430\u043D\u043D\u043E\u0433\u043E \u0434\u0435\u043B\u0430.</p>` : ""}
+      <p class="form-note">\u041E\u0442\u043F\u0440\u0430\u0432\u043A\u0430, \u043F\u0435\u0447\u0430\u0442\u044C \u0438 \u0434\u043E\u0441\u0442\u0430\u0432\u043A\u0430 \u0443\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E. \u0422\u043E\u043B\u044C\u043A\u043E \u0442\u0435\u0441\u0442\u043E\u0432\u044B\u0435 \u043F\u043E\u043B\u0443\u0447\u0430\u0442\u0435\u043B\u0438.</p><div id="flowError"></div>`,
       `<button class="button" data-flow-confirm ${!allowed.length ? "disabled" : ""}>\u0412\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0432 \u0434\u0435\u043C\u043E: ${allowed.length}</button>`
     );
   }
@@ -1926,6 +2013,179 @@ function installInteractions({ getState, getRole, modal: modal2, save: save2, re
   return { notify, enforcement };
 }
 
+// dist/spec-ui.mjs
+function installSpecUI({ getState, getRole, save: save2, render: render2, modal: modal2, close, toast: toast2 }) {
+  const $3 = (s) => document.querySelector(s);
+  let pending = null, choices = /* @__PURE__ */ new Set(), workFilter = "";
+  const btn = (action, label, r, c = "") => `<button class="button secondary small" data-debt-spec="${action}" data-row="${esc(r)}" data-case="${esc(c)}">${label}</button>`;
+  function mutate(fn) {
+    const s = getState(), before = structuredClone(s.rows);
+    try {
+      fn(s.rows);
+      save2();
+    } catch (e) {
+      s.rows = before;
+      throw e;
+    }
+  }
+  function dialog(kind, rid, cid) {
+    const r = getState().rows.find((x) => x.id === rid), c = r?.cases.find((x) => x.id === cid);
+    pending = { kind, rid, cid, snapshot: JSON.stringify(getState().rows) };
+    let title = "", body = "";
+    if (kind === "repeat") {
+      title = "\u0421\u0432\u0435\u0440\u0438\u0442\u044C. \u041F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0439 \u0434\u043E\u043B\u0433 \u043D\u0430 \u041B\u0421";
+      body = `<p>\u041D\u043E\u0432\u044B\u0439 \u0434\u043E\u043B\u0433: ${money(amount(unassigned(r)))} \u0437\u0430 ${esc(outsidePeriod(r))}.</p><h3>\u0420\u0430\u043D\u0435\u0435 \u043E\u0442\u043A\u0440\u044B\u0442\u044B\u0435 \u0434\u0435\u043B\u0430</h3>${r.cases.map((c2) => `<p>${esc(c2.id)} \xB7 ${esc(c2.period)} \xB7 ${esc(c2.stage)} \xB7 \u043E\u0441\u0442\u0430\u0442\u043E\u043A ${money(amount(c2.remaining))}</p>`).join("")}<label><input id="repeatChecked" type="checkbox"> \u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044E: \u044D\u0442\u043E \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u0434\u043E\u043B\u0433, \u043E\u043D \u043D\u0435 \u0432\u043A\u043B\u044E\u0447\u0451\u043D \u0432 \u043F\u0440\u0435\u0436\u043D\u0438\u0435 \u0434\u0435\u043B\u0430</label>`;
+    }
+    if (kind === "reminder") {
+      title = "\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435 \u043F\u043E \u0434\u0435\u043B\u0443";
+      body = `<p>${esc(c.id)} \xB7 ${esc(c.stage)}</p><label>\u0427\u0442\u043E \u0441\u0434\u0435\u043B\u0430\u0442\u044C<textarea id="specText" required></textarea></label><label>\u041A\u043E\u0433\u0434\u0430<input id="specDue" type="date" min="${TODAY}" value="${TODAY}"></label>`;
+    }
+    if (kind === "status") {
+      title = "\u0427\u0442\u043E \u0437\u0430\u0444\u0438\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u043D\u043E \u043F\u043E \u0434\u0435\u043B\u0443";
+      body = `<p>${esc(c.id)} \xB7 ${esc(c.stage)}</p><label>\u0421\u0442\u0430\u0442\u0443\u0441 \u0440\u0430\u0431\u043E\u0442\u044B<input id="specStatus" value="${esc(c.manualStatus?.label || "")}" placeholder="\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0443\u0441\u043B\u043E\u0432\u0438\u044F \u043F\u0435\u0440\u0435\u0434\u0430\u043D\u044B \u043D\u0430 \u0441\u043E\u0433\u043B\u0430\u0441\u043E\u0432\u0430\u043D\u0438\u0435"></label><label>\u041A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0439<textarea id="specText">${esc(c.manualStatus?.note || "")}</textarea></label>`;
+    }
+    if (kind === "read") {
+      title = "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C \u043F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u0435 \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F";
+      body = '<p>\u0422\u043E\u043B\u044C\u043A\u043E \u0442\u0435\u0441\u0442\u043E\u0432\u044B\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442. \u041E\u0442\u043C\u0435\u0442\u044C\u0442\u0435 \u043A\u043E\u043D\u043A\u0440\u0435\u0442\u043D\u0443\u044E \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0443; \u0441\u0430\u043C\u0430 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0430 \u043D\u0435 \u043E\u0437\u043D\u0430\u0447\u0430\u0435\u0442 \u043F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u044F.</p><select id="specEvent">' + r.events.filter((e) => e.caseId === cid && ["app", "email", "max"].includes(e.action) && !e.readAt && ["\u041E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u043E (\u0434\u0435\u043C\u043E)", "\u0414\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D\u043E (\u0434\u0435\u043C\u043E)"].includes(e.status)).map((e) => `<option value="${esc(e.id)}">${esc(e.label)} \xB7 ${esc(e.at)}</option>`).join("") + "</select>";
+    }
+    if (kind === "move") {
+      const targets = cid ? [[rid, cid]] : [...choices].map((s) => JSON.parse(s));
+      pending.targets = targets;
+      title = "\u041F\u0435\u0440\u0435\u043D\u0435\u0441\u0442\u0438 \u0434\u0435\u043B\u0430 \u043D\u0430 \u0434\u0440\u0443\u0433\u0443\u044E \u0441\u0442\u0430\u0434\u0438\u044E";
+      body = `<p>\u0412\u044B\u0431\u0440\u0430\u043D\u043E \u0434\u0435\u043B: ${targets.length}. \u0414\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u044B, \u043E\u043F\u043B\u0430\u0442\u044B \u0438 \u0438\u0441\u0442\u043E\u0440\u0438\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F. \u041F\u0435\u0440\u0435\u0445\u043E\u0434 \u043D\u0435 \u043E\u0437\u043D\u0430\u0447\u0430\u0435\u0442 \u043F\u043E\u0434\u0430\u0447\u0443 \u0432 \u0441\u0443\u0434 \u0438\u043B\u0438 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0443 \u0434\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u043E\u0432.</p><label>\u0421\u0442\u0430\u0434\u0438\u044F<select id="specStage">${MANUAL_STAGES.map((s) => `<option>${s}</option>`).join("")}</select></label><label>\u041E\u0441\u043D\u043E\u0432\u0430\u043D\u0438\u0435 \u043F\u0435\u0440\u0435\u0445\u043E\u0434\u0430<textarea id="specText" required></textarea></label>`;
+    }
+    modal2(title, "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F", `${body}<div id="specError" role="alert"></div>`, btn("confirm", "\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C", rid, cid));
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-debt-spec]");
+    if (!b) return;
+    e.preventDefault();
+    try {
+      if (getRole() !== "lawyer") throw Error("\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u043E \u044E\u0440\u0438\u0441\u0442\u0443");
+      const action = b.dataset.debtSpec, rid = b.dataset.row, cid = b.dataset.case;
+      if (["repeat", "reminder", "status", "move", "read"].includes(action)) {
+        dialog(action, rid, cid);
+        return;
+      }
+      if (action === "done") {
+        mutate((rows) => closeReminder(rows.find((r) => r.id === rid), cid, b.dataset.reminder));
+        close();
+        render2();
+        return;
+      }
+      if (action === "confirm") {
+        if (!pending || pending.snapshot !== JSON.stringify(getState().rows)) throw Error("\u0414\u0430\u043D\u043D\u044B\u0435 \u0438\u0437\u043C\u0435\u043D\u0438\u043B\u0438\u0441\u044C. \u041E\u0442\u043A\u0440\u043E\u0439\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0437\u0430\u043D\u043E\u0432\u043E.");
+        const p = pending;
+        mutate((rows) => {
+          const r = rows.find((r2) => r2.id === p.rid), c = r?.cases.find((c2) => c2.id === p.cid);
+          if (p.kind === "repeat") {
+            if (!$3("#repeatChecked").checked) throw Error("\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0443 \u043F\u0435\u0440\u0438\u043E\u0434\u0430");
+            confirmRepeat(r);
+          }
+          if (p.kind === "reminder") saveReminder(r, p.cid, $3("#specText").value, $3("#specDue").value);
+          if (p.kind === "read") {
+            const event = r.events.find((e2) => e2.id === $3("#specEvent").value && e2.caseId === p.cid);
+            if (!event) throw Error("\u041D\u0435\u0442 \u043E\u0442\u043F\u0440\u0430\u0432\u043A\u0438, \u0434\u043B\u044F \u043A\u043E\u0442\u043E\u0440\u043E\u0439 \u043C\u043E\u0436\u043D\u043E \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C \u043F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u0435");
+            event.readAt = TODAY;
+            event.readSource = "\u0423\u0447\u0435\u0431\u043D\u043E\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u0435";
+            audit(r, "\u041F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u0435 \u0443\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F (\u0442\u0435\u0441\u0442)", event.id);
+          }
+          if (p.kind === "status") {
+            const label = $3("#specStatus").value.trim(), note = $3("#specText").value.trim();
+            if (!label || !note) throw Error("\u0423\u043A\u0430\u0436\u0438\u0442\u0435 \u0441\u0442\u0430\u0442\u0443\u0441 \u0438 \u043F\u043E\u044F\u0441\u043D\u0435\u043D\u0438\u0435");
+            c.statusHistory ||= [];
+            if (c.manualStatus) c.statusHistory.push(c.manualStatus);
+            c.manualStatus = { label, note, at: TODAY };
+            audit(r, "\u0421\u0442\u0430\u0442\u0443\u0441 \u0440\u0430\u0431\u043E\u0442\u044B \u043F\u043E \u0434\u0435\u043B\u0443", `${c.id}: ${label}. ${note}`);
+          }
+          if (p.kind === "move") {
+            const next = moveCases(rows, p.targets, $3("#specStage").value, $3("#specText").value);
+            rows.splice(0, rows.length, ...next);
+          }
+        });
+        pending = null;
+        choices.clear();
+        close();
+        render2();
+        toast2("\u0421\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u043E");
+      }
+    } catch (err) {
+      if ($3("#specError")) $3("#specError").textContent = err.message;
+      else toast2(err.message);
+    }
+  });
+  document.addEventListener("change", (e) => {
+    if (e.target.id === "specWorkFilter") {
+      workFilter = e.target.value;
+      render2();
+      return;
+    }
+    if (e.target.id === "specSelectAll") {
+      for (const box of document.querySelectorAll("[data-spec-choice]:not(:disabled)")) if (!box.closest("tr").hidden) {
+        box.checked = e.target.checked;
+        box.checked ? choices.add(box.dataset.specChoice) : choices.delete(box.dataset.specChoice);
+      }
+    } else if (e.target.dataset.specChoice) {
+      const key = e.target.dataset.specChoice;
+      e.target.checked ? choices.add(key) : choices.delete(key);
+    }
+    const host = $3("#specBulk");
+    if (host) host.innerHTML = choices.size ? `<strong>\u0412\u044B\u0431\u0440\u0430\u043D\u043E \u0434\u0435\u043B: ${choices.size}</strong> ${btn("move", "\u041F\u0435\u0440\u0435\u043D\u0435\u0441\u0442\u0438 \u043D\u0430 \u0441\u0442\u0430\u0434\u0438\u044E", "")}` : "";
+  });
+  function enhance(view2, filters2) {
+    const s = getState();
+    if (view2 === "registry" && filters2.stage === "\u0411\u0435\u0437 \u0434\u0435\u043B\u0430") {
+      $3('#content [data-filter="queue"]')?.remove();
+      for (const tr of $3("#content table")?.tBodies[0].rows || []) {
+        const id = tr.querySelector("[data-open]")?.dataset.open, r = s.rows.find((x) => x.id === id);
+        if (!r) continue;
+        const a = noCaseAssessment(r), b = tr.cells[4].querySelector("button");
+        b.innerHTML = `${esc(a?.label || "\u2014")}<small>${esc(a?.detail || "\u0414\u043E\u043B\u0433\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B \u043D\u0435\u0442")}</small>`;
+        if (r.caseBalanceConflict) tr.cells[2].innerHTML = `\u0421\u0443\u043C\u043C\u0430 \u0432\u043D\u0435 \u0434\u0435\u043B \u043D\u0435 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0430<small>\u0412\u0441\u0435\u0433\u043E \u043F\u043E \u041B\u0421: ${money(total(r))}</small>`;
+      }
+      const shown = [...$3("#content table").tBodies[0].rows].map((tr) => s.rows.find((r) => r.id === tr.querySelector("[data-open]").dataset.open)), uncertain = shown.filter((r) => r.caseBalanceConflict).length;
+      if (uncertain) $3("#content .table-end span").textContent = `${shown.length} \u041B\u0421 \xB7 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0451\u043D\u043D\u044B\u0439 \u0434\u043E\u043B\u0433 \u0432\u043D\u0435 \u0434\u0435\u043B ${money(shown.filter((r) => !r.caseBalanceConflict).reduce((n, r) => n + amount(unassigned(r)), 0))} \xB7 \u0441\u0443\u043C\u043C\u0430 \u0443\u0442\u043E\u0447\u043D\u044F\u0435\u0442\u0441\u044F \u043F\u043E ${uncertain} \u041B\u0421`;
+    }
+    if (view2 !== "cases") return;
+    $3('#content [data-filter="queue"]')?.remove();
+    const table = $3("#content table");
+    if (!table) return;
+    $3("#content .filters").insertAdjacentHTML("beforeend", `<select id="specWorkFilter" aria-label="\u0422\u0435\u043A\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430">${["", "\u0421\u0435\u0433\u043E\u0434\u043D\u044F", "\u041F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E", "\u0417\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u043E", "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0448\u0430\u0433 \u043D\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D", "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E"].map((v) => `<option value="${esc(v)}" ${v === workFilter ? "selected" : ""}>${v || "\u041B\u044E\u0431\u0430\u044F \u0442\u0435\u043A\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430"}</option>`).join("")}</select>`);
+    choices.clear();
+    $3("#content .table-frame").insertAdjacentHTML("beforebegin", '<div class="selection-bar" id="specBulk"></div>');
+    table.tHead.rows[0].insertAdjacentHTML("afterbegin", '<th><input id="specSelectAll" type="checkbox" aria-label="\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0432\u0441\u0435 \u0434\u0435\u043B\u0430 \u0441\u0442\u0430\u0434\u0438\u0438"></th>');
+    table.tHead.rows[0].insertAdjacentHTML("beforeend", "<th>\u0422\u0435\u043A\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430</th>");
+    for (const tr of table.tBodies[0].rows) {
+      const link = tr.querySelector(".debtor-link"), r = s.rows.find((x) => x.id === link.dataset.open), c = r.cases.find((x) => x.id === link.dataset.caseId), w = caseWork(c);
+      tr.insertAdjacentHTML("afterbegin", `<td data-label="\u0412\u044B\u0431\u043E\u0440"><input type="checkbox" data-spec-choice="${esc(JSON.stringify([r.id, c.id]))}" aria-label="\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0434\u0435\u043B\u043E ${esc(c.id)}" ${c.stage === "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E" ? "disabled" : ""}></td>`);
+      link.insertAdjacentHTML("beforeend", `<small>${esc(c.ownerBalances?.length ? c.ownerBalances.map((o) => `${o.name} \xB7 ${o.share}%`).join("; ") : "\u0421\u043E\u0441\u0442\u0430\u0432 \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u043E\u0432 \u2014 \u0432 \u043A\u0430\u0440\u0442\u043E\u0447\u043A\u0435 \u041B\u0421")}</small>`);
+      const stateCell = tr.cells[4];
+      if (c.manualStatus) stateCell.insertAdjacentHTML("afterbegin", `<strong>${esc(c.manualStatus.label)}</strong><small>${esc(c.manualStatus.note)}</small>`);
+      if (c.stage !== "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E") stateCell.insertAdjacentHTML("beforeend", btn("status", "\u0417\u0430\u0444\u0438\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0441\u0442\u0430\u0442\u0443\u0441", r.id, c.id));
+      const reads = (r.events || []).filter((e) => e.caseId === c.id && e.readAt);
+      if (filters2.stage === "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435") tr.insertAdjacentHTML("beforeend", `<td data-label="\u041F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u0435">${reads.length ? "\u041F\u0440\u043E\u0447\u0438\u0442\u0430\u043D\u043E: " + reads.length : "\u041D\u0435\u0442 \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u044F \u043F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u044F"}</td>`);
+      if (filters2.stage === "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435" && !table.querySelector("[data-read-header]")) table.tHead.rows[0].lastElementChild.insertAdjacentHTML("beforebegin", "<th data-read-header>\u041F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u0435</th>");
+      const next = tr.querySelector('[data-case-work]:not([data-case-work="documents"]):not([data-case-work="history"])');
+      if (w.due && next?.parentElement.querySelector("small")) next.parentElement.querySelector("small").textContent = "\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C: " + w.due;
+      tr.insertAdjacentHTML("beforeend", `<td data-label="\u0422\u0435\u043A\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430"><strong class="${w.label === "\u041F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E" ? "data-warning" : ""}">${esc(w.label)}</strong><small>${esc(w.due || "")}</small>${w.reminder ? `<p>${esc(w.reminder.text)}</p>` : ""}${c.stage !== "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E" ? btn("reminder", "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435", r.id, c.id) + btn("move", "\u041F\u0435\u0440\u0435\u043D\u0435\u0441\u0442\u0438 \u0434\u0435\u043B\u043E", r.id, c.id) : ""}</td>`);
+      tr.hidden = !!workFilter && w.label !== workFilter;
+    }
+    const count = [...table.tBodies[0].rows].filter((r) => !r.hidden).length;
+    $3("#content .filter-summary span").textContent = `\u041F\u043E\u043A\u0430\u0437\u0430\u043D\u043E \u0434\u0435\u043B: ${count} \u0438\u0437 ${table.tBodies[0].rows.length}`;
+    if (!count && !$3("#content .empty")) table.insertAdjacentHTML("afterend", '<p class="empty">\u041D\u0435\u0442 \u0434\u0435\u043B \u043F\u043E \u0432\u044B\u0431\u0440\u0430\u043D\u043D\u043E\u043C\u0443 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u044E \u0440\u0430\u0431\u043E\u0442\u044B</p>');
+  }
+  function drawer(r, tab) {
+    if (tab !== "overview" || getRole() !== "lawyer") return;
+    const c = currentCase(r);
+    if (!c) return;
+    const host = $3("#overlay .drawer-body");
+    if (!host) return;
+    host.insertAdjacentHTML("beforeend", `<section class="case-section"><h3>\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u044F \u043F\u043E \u044D\u0442\u043E\u043C\u0443 \u0434\u0435\u043B\u0443</h3>${(c.reminders || []).map((t) => `<div class="source-row"><div><strong>${esc(t.text)}</strong><small>${esc(t.due)} \xB7 ${esc(t.status === "done" ? "\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E" : t.due < TODAY ? "\u041F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E" : "\u0417\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u043E")}</small></div>${t.status === "open" ? `<button class="button secondary small" data-debt-spec="done" data-row="${r.id}" data-case="${c.id}" data-reminder="${t.id}">\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E</button>` : ""}</div>`).join("") || "<p>\u041D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u044F \u043D\u0435 \u0441\u043E\u0437\u0434\u0430\u043D\u044B</p>"}${c.stage !== "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E" ? btn("reminder", "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043D\u0430\u043F\u043E\u043C\u0438\u043D\u0430\u043D\u0438\u0435", r.id, c.id) + btn("move", "\u041F\u0435\u0440\u0435\u043D\u0435\u0441\u0442\u0438 \u0434\u0435\u043B\u043E", r.id, c.id) : ""}</section>`);
+    if (c.stage === "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u0435") host.insertAdjacentHTML("beforeend", btn("read", "\u041E\u0442\u043C\u0435\u0442\u0438\u0442\u044C \u043F\u0440\u043E\u0447\u0442\u0435\u043D\u0438\u0435 \u0432 \u0442\u0435\u0441\u0442\u043E\u0432\u043E\u043C \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u0438", r.id, c.id));
+  }
+  return { enhance, drawer };
+}
+
 // dist/app.mjs
 var $2 = (s) => document.querySelector(s);
 var KEY = "mdo-debt-demo-v1";
@@ -1963,6 +2223,13 @@ if (installOwnerExample(state)) {
     localStorage.setItem(KEY, JSON.stringify(state));
   } catch {
     storageWarning = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u0438\u043C\u0435\u0440 \u0434\u043E\u043B\u0435\u0439";
+  }
+}
+if (installSpecExamples(state)) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+  } catch {
+    storageWarning = "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u0438\u043C\u0435\u0440\u044B \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E\u0433\u043E \u0434\u043E\u043B\u0433\u0430";
   }
 }
 var reportFrom = "2026-10-01";
@@ -2094,6 +2361,7 @@ function renderContent() {
   if (["registry", "accounts", "work"].includes(view)) {
     [...$2("#content tbody").rows].forEach((tr, i) => tr.querySelector(".debtor-link").insertAdjacentHTML("beforeend", `<small>${esc2(ownersSummary(visible()[i]))}</small>`));
   }
+  specUI.enhance(view, filters);
   initIcons();
 }
 function renderCaseList() {
@@ -2200,7 +2468,7 @@ function openDrawer(id, tab = "overview", keepCase = false) {
     selectCase(r, filters.stage === "\u0411\u0435\u0437 \u0434\u0435\u043B\u0430" ? null : w.caseId);
   }
   const rec = recommendation2({ ...r, _caseView: true }), info = STAGE_INFO[r.stage], legal = role === "lawyer";
-  const tabs = [["overview", "\u041A\u0430\u0440\u0442\u043E\u0447\u043A\u0430"], ["documents", `\u0414\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u044B \u0434\u0435\u043B\u0430 (${[...currentCase(r)?.drafts || [], ...currentCase(r)?.documents || []].filter((d) => !d.archived).length})`], ["data", "\u0414\u0430\u043D\u043D\u044B\u0435 \u0438 \u0440\u0430\u0441\u0447\u0451\u0442"], ["history", "\u0418\u0441\u0442\u043E\u0440\u0438\u044F"]];
+  const tabs = [["overview", "\u041A\u0430\u0440\u0442\u043E\u0447\u043A\u0430"], ["documents", `\u0414\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u044B \u0434\u0435\u043B\u0430 (${[...currentCase(r)?.drafts || [], ...currentCase(r)?.documents || []].filter((d) => !d.archived).length})`], ["data", "\u0411\u0430\u043B\u0430\u043D\u0441 \u0438 \u0438\u0441\u0442\u043E\u0440\u0438\u044F"], ["history", "\u0418\u0441\u0442\u043E\u0440\u0438\u044F"]];
   let body = "";
   if (tab === "overview") {
     const balance = currentCase(r)?.remaining || unassigned(r);
@@ -2218,7 +2486,7 @@ function openDrawer(id, tab = "overview", keepCase = false) {
       ${r.claim ? `<h3>\u0422\u0440\u0435\u0431\u043E\u0432\u0430\u043D\u0438\u0435 \u043F\u043E \u0434\u0435\u043B\u0443 ${esc2(r.caseId)}</h3><div class="component-table"><table><tbody><tr><td>\u041F\u0435\u0440\u0432\u043E\u043D\u0430\u0447\u0430\u043B\u044C\u043D\u043E\u0435 \u0442\u0440\u0435\u0431\u043E\u0432\u0430\u043D\u0438\u0435</td><td>${money(r.claim.amount)}</td></tr><tr><td>\u041F\u0435\u0440\u0438\u043E\u0434</td><td>${esc2(r.claim.period)}</td></tr></tbody></table></div><small>\u0422\u0440\u0435\u0431\u043E\u0432\u0430\u043D\u0438\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u043E. \u041E\u043F\u043B\u0430\u0442\u044B \u043C\u0435\u043D\u044F\u044E\u0442 \u043E\u0441\u0442\u0430\u0442\u043E\u043A, \u0430 \u043D\u0435 \u0441\u0443\u043C\u043C\u0443 \u043F\u0435\u0440\u0432\u043E\u043D\u0430\u0447\u0430\u043B\u044C\u043D\u043E\u0433\u043E \u0434\u043E\u043A\u0443\u043C\u0435\u043D\u0442\u0430.</small>` : ""}
       ${r.payments.some((p) => !r.caseId || p.caseId === r.caseId) ? `<h3>\u0423\u0447\u0442\u0451\u043D\u043D\u044B\u0435 \u043F\u043E\u0441\u0442\u0443\u043F\u043B\u0435\u043D\u0438\u044F</h3>${r.payments.filter((p) => !r.caseId || p.caseId === r.caseId).map((p) => `<div class="source-row"><div><strong>${money(p.amount)} \xB7 ${date(p.at)}</strong><small>\u0414\u043E\u043B\u0433 ${money(p.principal)} \xB7 \u043F\u0435\u043D\u0438 ${money(p.penalty)} \xB7 \u043F\u043E\u0448\u043B\u0438\u043D\u0430 ${money(p.fee)}</small><small>${esc2(p.ownerName || "\u041E\u0431\u0449\u0438\u0439 \u0434\u043E\u043B\u0433 \u041B\u0421")} \xB7 ${esc2(p.caseId || "\u0412\u043D\u0435 \u0434\u0435\u043B\u0430")}</small><small>\u042D\u0442\u0430\u043F \u043F\u0440\u0438 \u043E\u043F\u043B\u0430\u0442\u0435: ${esc2(p.stage || "\u043D\u0435 \u0437\u0430\u0444\u0438\u043A\u0441\u0438\u0440\u043E\u0432\u0430\u043D")}</small></div></div>`).join("")}` : ""}
       <p class="form-note">${esc2(r.source)} \xB7 ${date(r.asOf)}. \u041E\u043F\u043B\u0430\u0442\u044B \u0440\u0430\u0437\u043D\u043E\u0441\u0438\u0442 \u0440\u0430\u0441\u0447\u0451\u0442\u0447\u0438\u043A, \u0434\u0435\u043B\u043E \u0432\u0435\u0434\u0451\u0442 \u044E\u0440\u0438\u0441\u0442.</p>
-      ${r.billing ? `<details class="scenario-tools"><summary>\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F \u043D\u0430 \u0442\u0435\u0441\u0442\u043E\u0432\u044B\u0445 \u0434\u0430\u043D\u043D\u044B\u0445</summary>${demoControls(r, role)}</details>` : ""}`;
+      `;
   } else if (tab === "data") {
     body = dataPanel(r);
   } else if (tab === "history") {
@@ -2235,6 +2503,7 @@ function openDrawer(id, tab = "overview", keepCase = false) {
     el.disabled = true;
     el.title = "\u0421\u0432\u0435\u0434\u0435\u043D\u0438\u044F \u0437\u0430\u043F\u043E\u043B\u043D\u044F\u0435\u0442 \u0440\u0430\u0441\u0447\u0451\u0442\u0447\u0438\u043A";
   }
+  specUI.drawer(r, tab);
 }
 function modal(title, subtitle, body, footer) {
   showOverlay(`<div class="modal-shade"><section class="modal" role="dialog" aria-modal="true" aria-label="${esc2(title)}"><header class="modal-head"><div><h2>${esc2(title)}</h2><small>${esc2(subtitle)}</small></div><button class="icon-button" data-action="close" aria-label="\u0417\u0430\u043A\u0440\u044B\u0442\u044C">${icon2("x")}</button></header><div class="modal-body">${body}</div><div class="modal-foot"><button class="button secondary" data-action="close">${footer ? "\u041E\u0442\u043C\u0435\u043D\u0430" : "\u0417\u0430\u043A\u0440\u044B\u0442\u044C"}</button>${footer || ""}</div></section></div>`);
@@ -2288,7 +2557,7 @@ function payment(id) {
 }
 function ownershipPanel(r) {
   const c = currentCase(r), owners = c?.ownerBalances;
-  return `<section class="case-section"><h3>\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u0438 \u043F\u043E\u0433\u0430\u0448\u0435\u043D\u0438\u0435 \u0434\u043E\u043B\u0435\u0439</h3>${owners ? `<div class="table-frame"><table><thead><tr><th>\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A / \u0434\u043E\u043B\u044F</th><th>\u0420\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u043E</th><th>\u041F\u043E\u0433\u0430\u0448\u0435\u043D\u043E</th><th>\u041E\u0441\u0442\u0430\u043B\u043E\u0441\u044C</th></tr></thead><tbody>${owners.map((o) => `<tr><td>${esc2(o.name)}<small>${o.share}%</small></td><td>${money(amount(o.initial))}</td><td>${money(amount(o.initial) - amount(o.remaining))}</td><td>${money(amount(o.remaining))}<small>${amount(o.remaining) === 0 ? "\u0414\u043E\u043B\u044F \u043F\u043E\u0433\u0430\u0448\u0435\u043D\u0430" : "\u0412 \u0440\u0430\u0431\u043E\u0442\u0435"}</small></td></tr>`).join("")}</tbody></table></div>` : `<p>${r.owners.map((o) => `${esc2(o.name)} \xB7 ${o.share}%`).join("<br>") || "\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B"}</p>${r.owners.length ? `<button class="button secondary small" data-ownership="${c ? "assign" : "create"}" data-id="${r.id}">${c ? "\u0420\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0438\u0442\u044C \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u043F\u043E \u0434\u043E\u043B\u044F\u043C" : "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u043F\u043E \u0434\u043E\u043B\u044F\u043C"}</button>` : ""}`}<small>\u0414\u043E\u043B\u0438 \u0438 \u043E\u0441\u043D\u043E\u0432\u0430\u043D\u0438\u0435 \u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u0438\u044F \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A. \u041E\u043F\u043B\u0430\u0442\u0430 \u043E\u0434\u043D\u043E\u0433\u043E \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0430 \u043D\u0435 \u043F\u043E\u0433\u0430\u0448\u0430\u0435\u0442 \u0434\u043E\u043B\u0433 \u0434\u0440\u0443\u0433\u043E\u0433\u043E.</small></section>`;
+  return `<section class="case-section"><h3>\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u0438 \u043F\u043E\u0433\u0430\u0448\u0435\u043D\u0438\u0435 \u0434\u043E\u043B\u0435\u0439</h3>${owners ? `<div class="table-frame"><table><thead><tr><th>\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A / \u0434\u043E\u043B\u044F</th><th>\u0420\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u043E</th><th>\u041F\u043E\u0433\u0430\u0448\u0435\u043D\u043E</th><th>\u041E\u0441\u0442\u0430\u043B\u043E\u0441\u044C</th></tr></thead><tbody>${owners.map((o) => `<tr><td>${esc2(o.name)}<small>${o.share}%</small></td><td>${money(amount(o.initial))}</td><td>${money(amount(o.initial) - amount(o.remaining))}</td><td>${money(amount(o.remaining))}<small>${amount(o.remaining) === 0 ? "\u0414\u043E\u043B\u044F \u043F\u043E\u0433\u0430\u0448\u0435\u043D\u0430" : "\u0412 \u0440\u0430\u0431\u043E\u0442\u0435"}</small></td></tr>`).join("")}</tbody></table></div>` : `<p>${r.owners.map((o) => `${esc2(o.name)} \xB7 ${o.share}%`).join("<br>") || "\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438 \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B"}</p>${c && r.owners.length ? `<button class="button secondary small" data-ownership="${c ? "assign" : "create"}" data-id="${r.id}">${c ? "\u0420\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0438\u0442\u044C \u043E\u0441\u0442\u0430\u0442\u043E\u043A \u043F\u043E \u0434\u043E\u043B\u044F\u043C" : "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0435 \u0434\u0435\u043B\u0430 \u043F\u043E \u0434\u043E\u043B\u044F\u043C"}</button>` : ""}`}<small>\u0414\u043E\u043B\u0438 \u0438 \u043E\u0441\u043D\u043E\u0432\u0430\u043D\u0438\u0435 \u0440\u0430\u0441\u043F\u0440\u0435\u0434\u0435\u043B\u0435\u043D\u0438\u044F \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442 \u0441\u043E\u0442\u0440\u0443\u0434\u043D\u0438\u043A. \u041E\u043F\u043B\u0430\u0442\u0430 \u043E\u0434\u043D\u043E\u0433\u043E \u0441\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0430 \u043D\u0435 \u043F\u043E\u0433\u0430\u0448\u0430\u0435\u0442 \u0434\u043E\u043B\u0433 \u0434\u0440\u0443\u0433\u043E\u0433\u043E.</small></section>`;
 }
 function refreshPaymentOwner(r) {
   const c = r.cases.find((c2) => c2.id === $2("#paymentCase").value);
@@ -2490,7 +2759,7 @@ ${r.claim ? `\u0421\u0443\u0434\u0435\u0431\u043D\u043E\u0435 \u0442\u0440\u0435
     return;
   }
   if (action === "export") {
-    download("mdo-debt-registry.csv", csv(visible().map((r) => ({ "\u0423\u041A": r.company, "\u0414\u043E\u043C": r.building, "\u041A\u0432\u0430\u0440\u0442\u0438\u0440\u0430": r.flat, "\u041B\u0421": r.account, "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0434\u043E\u043B\u0433": r.principal / 100, "\u041F\u0435\u043D\u0438": r.penalty / 100, "\u041F\u043E\u0448\u043B\u0438\u043D\u0430": r.fee / 100, "\u041E\u0441\u0442\u0430\u0442\u043E\u043A": total(r) / 100, "\u0421\u0442\u0430\u0434\u0438\u044F": r.stage, "\u041A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044F": r.category, "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435": recommendation2(r).label, "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A": r.source, "\u041D\u0430 \u0434\u0430\u0442\u0443": r.asOf }))), "text/csv;charset=utf-8");
+    download("mdo-debt-registry.csv", csv(visible().map((r) => ({ "\u0423\u041A": r.company, "\u0414\u043E\u043C": r.building, "\u041A\u0432\u0430\u0440\u0442\u0438\u0440\u0430": r.flat, "\u041B\u0421": r.account, "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0434\u043E\u043B\u0433": r.principal / 100, "\u041F\u0435\u043D\u0438": r.penalty / 100, "\u041F\u043E\u0448\u043B\u0438\u043D\u0430": r.fee / 100, "\u041E\u0441\u0442\u0430\u0442\u043E\u043A": total(r) / 100, "\u0421\u0442\u0430\u0434\u0438\u0438": [...new Set(stagePortions(r).filter((p) => p.id || p.amount > 0).map((p) => p.stage))].join("; "), "\u0414\u0435\u043B\u0430": r.cases.map((c) => `${c.id}: ${c.period}, ${c.stage}, ${amount(c.remaining) / 100} \u20BD`).join("; "), "\u0421\u043E\u0431\u0441\u0442\u0432\u0435\u043D\u043D\u0438\u043A\u0438": ownersSummary(r), "\u041A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044F": r.category, "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435": recommendation2(r).label, "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A": r.source, "\u041D\u0430 \u0434\u0430\u0442\u0443": r.asOf }))), "text/csv;charset=utf-8");
     return;
   }
   if (el.id === "importTop") {
@@ -2749,5 +3018,6 @@ var workbench = installWorkbench({ getState: () => state, getRole: () => role, s
   view = "sources";
   render();
 }, recordResult });
+var specUI = installSpecUI({ getState: () => state, getRole: () => role, save, render, modal, close: closeOverlay, toast });
 render();
 if (storageWarning) toast(storageWarning);

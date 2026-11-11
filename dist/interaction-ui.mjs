@@ -1,6 +1,7 @@
 import {previewNotificationBatch,confirmNotificationBatch,previewEnforcement,confirmEnforcement,notificationMessage,NOTIFICATION_CHANNELS} from './interaction-flow.mjs';
 import {esc} from './workspace-views.mjs';
 import {receiptPages} from './workspace-views.mjs';
+import {availableTemplates} from './documents.mjs';
 export function installInteractions({getState,getRole,modal,save,render,close,toast,openDrawer}){
   let pending=null,targets=[],index=0;
   const $=s=>document.querySelector(s);
@@ -15,7 +16,8 @@ export function installInteractions({getState,getRole,modal,save,render,close,to
       <div class="delivery-list">${p.items.map((x,i)=>`<button class="delivery-item ${i===index?'active':''}" data-flow-preview="${i}"><strong>${esc(NOTIFICATION_CHANNELS[x.channel])} · ЛС ${esc(x.account)}</strong><small>${esc(x.address)} · ${esc(x.reason||'Готово к отправке / печати')}</small></button>`).join('')}</div>
       ${item?.doc?`<h3>${item.channel==='robot'?'Сценарий обзвона':item.channel==='notice'||item.channel==='receipt'?'Печатный документ':'Текст уведомления'} · ЛС ${esc(item.account)}</h3><pre class="document-preview">${esc(notificationMessage(item,item.channel))}</pre>`:'<p>Выберите каналы. Недоступные отправки будут пропущены с указанной причиной.</p>'}
       ${item?.channel==='receipt'&&selectedCase?receiptPages({...selectedRow,...selectedCase.remaining,period:selectedCase.period}):''}
-      <p class="form-note">Уведомление о долге, не весь пакет дела. Отправка, печать и доставка учитываются отдельно. Только тестовые получатели.</p><div id="flowError"></div>`,
+      ${selectedCase?`<h3>Документы стадии «Уведомление»</h3><ul>${availableTemplates(selectedCase).map(([k,d])=>`<li>${esc(d.title)}${item?.doc?.kind===k?' — используется для выбранного канала':''}</li>`).join('')}</ul><p>Документ выбранного канала сохранится после подтверждения. Остальные шаблоны доступны в документах созданного дела.</p>`:''}
+      <p class="form-note">Отправка, печать и доставка учитываются отдельно. Только тестовые получатели.</p><div id="flowError"></div>`,
       `<button class="button" data-flow-confirm ${!allowed.length?'disabled':''}>Выполнить в демо: ${allowed.length}</button>`);
   }
   function enforcement(id,recipient='bank'){

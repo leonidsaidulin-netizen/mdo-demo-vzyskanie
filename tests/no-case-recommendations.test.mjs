@@ -10,11 +10,11 @@ const fresh=()=>({...structuredClone(seed().rows[0]),asOf:TODAY,unallocated:0,ca
 const names=['Сверить. Повторный долг на ЛС','Запросить у расчётчика распределение','Подготовить уведомление'];
 test('no-case recommendations match the three owner-approved names',()=>{
   const scenarios=[
-    [{reviewTask:{status:'open',reason:'Проверить период',due:TODAY}},names[0],'reviewStatus'],
+    [{reviewTask:{status:'open',reason:'Проверить период',due:TODAY}},'','data'],
     [{caseBalanceConflict:true},names[1],'review'],
-    [{unallocated:10000},names[1],'review'],
-    [{asOf:'2026-10-01'},names[1],'review'],
-    [{disputed:true},names[1],'review'],
+    [{unallocated:10000},'','data'],
+    [{asOf:'2026-10-01'},'','data'],
+    [{disputed:true},'','data'],
     [{},names[2],'channels'],
     [{promise:'2026-10-01'},names[2],'channels'],
     [{task:{status:'open',text:'Задача старого дела',due:TODAY}},names[2],'channels'],
@@ -26,9 +26,9 @@ test('no-case recommendations match the three owner-approved names',()=>{
     assert.equal(JSON.stringify(r),before,'view must not create cases or change history');
   }
 });
-test('open request wins over other data issues; old delivery does not change no-case recommendation',()=>{
+test('open request is not repeat debt; distribution issue and old delivery keep their own scope',()=>{
   const r=fresh();r.caseBalanceConflict=true;r.reviewTask={status:'open',reason:'Сумма',due:TODAY};
-  assert.equal(roleRecommendation(r,'lawyer').label,names[0]);
+  assert.equal(roleRecommendation(r,'lawyer').label,names[1]);
   r.reviewTask=null;r.caseBalanceConflict=false;
   r.events.push({scope:`1:${r.period}`,caseId:'old-case',action:'app',status:'Нет ответа (демо)'});
   assert.equal(roleRecommendation(r,'lawyer').label,names[2]);

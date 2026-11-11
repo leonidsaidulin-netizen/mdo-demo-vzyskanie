@@ -2,6 +2,7 @@ import {TODAY,ACTIONS,eligible,changeStage,money} from './model.mjs';
 import {currentCase,createCase,selectCase,unassigned,amount,noticeScope} from './cases.mjs';
 import {billingLines,billingPeriod} from './billing.mjs';
 import {ensureDocument,documentStatus,draftDocument,saveDraft} from './documents.mjs';
+import {noCaseAssessment} from './spec-logic.mjs';
 
 export const NOTIFICATION_CHANNELS={app:'Мобильное приложение',email:'Email',max:'MAX',robot:'Голосовой робот',notice:'Печать',receipt:'В квитанции'};
 export function notificationMessage(item,channel){
@@ -25,6 +26,7 @@ export function previewNotifications(rows,targets,channel='app'){
       if(caseId&&currentCase(r).stage!=='Уведомление')throw Error('Уведомление о долге доступно на досудебном этапе');
       const matching=r.events.filter(e=>e.caseId===caseId&&e.status!=='Подготовлено (демо)');
       reason=eligible({...r,events:matching},channel);if(reason)throw Error(reason);
+      if(!caseId){const a=noCaseAssessment(r);if(!a||a.key!=='new')throw Error(a?.detail||'Долга вне дел нет');}
       if(!caseId)createCase(r,r.billing?billingPeriod(billingLines(r)):r.period,unassigned(r));
       if(amount(currentCase(r).remaining)<=0)throw Error('По делу нет задолженности');
       doc=ensureDocument(r,channel==='receipt'?'demand':'notice');

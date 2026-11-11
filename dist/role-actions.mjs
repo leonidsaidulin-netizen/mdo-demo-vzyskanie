@@ -1,5 +1,6 @@
 import {recommendation,STAGES} from './model.mjs';
 import {workRecord} from './cases.mjs';
+import {noCaseAssessment} from './spec-logic.mjs';
 import {caseProgress} from './documents.mjs';
 
 const requests={
@@ -19,15 +20,11 @@ function accountingAction(rec,role){
 export function roleRecommendation(r,role){
   const scope=r._caseView?r:workRecord(r);
   if(role==='lawyer'&&scope.stage==='Без дела'&&!scope.caseId){
-    const rec=recommendation(scope);
-    if(rec.key==='waiting')return {...rec,label:'Сверить. Повторный долг на ЛС',action:'reviewStatus'};
-    // Keep monetary safety checks, but never inherit tasks or contact outcomes from an older case.
-    if(['caseBalance','reconcile','stale','dispute'].includes(rec.key))return {...rec,label:'Запросить у расчётчика распределение',action:'review'};
-    return {key:'new',label:'Подготовить уведомление',detail:'Долг этого периода ещё не включён в дело.',action:'channels',tone:'pink'};
+    return noCaseAssessment(scope)||{key:'none',label:'',detail:'Долга вне дел нет.',action:'data',blocked:true,tone:'neutral'};
   }
   const rec=recommendation(r),accounting=accountingAction(rec,role);
   if(accounting)return {...rec,...accounting};
-  if(role==='accountant')return {...rec,label:'Открыть данные и расчёт',action:'data',detail:`Остаток на ${r.asOf}. Работа с начислениями и оплатами.`};
+  if(role==='accountant')return {...rec,label:'Открыть баланс и историю',action:'data',detail:`Остаток на ${r.asOf}. Работа с начислениями и оплатами.`};
   return rec;
 }
 export function roleCaseProgress(c,r,role){
@@ -35,7 +32,7 @@ export function roleCaseProgress(c,r,role){
   const rec=r&&recommendation({...r,caseId:c?.id||null,stage:c?.stage||'Без дела',_caseView:true});
   const accounting=rec&&accountingAction(rec,role);
   if(p.dataIssue&&accounting)return {...p,next:accounting.label,work:accounting.action};
-  if(role==='accountant')return {...p,next:'Открыть данные и расчёт',work:'data'};
+  if(role==='accountant')return {...p,next:'Открыть баланс и историю',work:'data'};
   return p;
 }
 export function visibleStages(rows){
