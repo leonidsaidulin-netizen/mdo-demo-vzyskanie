@@ -64,3 +64,15 @@ th{text-transform:none;font-size:12px;white-space:normal;line-height:1.4}
 .channel-choices input[type=checkbox]{width:16px;height:16px;flex:none}
 .data-warning{color:#8b4a13}
 @media(max-width:600px){.channel-choices{grid-template-columns:1fr}.source-row .action-row{flex-wrap:wrap}.source-row{flex-wrap:wrap}}
+#specBulk:empty{display:none}
+.spec-case-table{min-width:1640px;table-layout:fixed}
+.spec-case-table th,.spec-case-table td{overflow-wrap:normal;word-break:normal;vertical-align:top}
+.spec-case-table th:first-child,.spec-case-table td:first-child{width:44px}
+.spec-case-table th:nth-child(2){width:230px}
+.spec-case-table th:nth-child(3){width:160px}
+.spec-case-table th:nth-child(4){width:140px}
+.spec-case-table td:nth-child(4){white-space:nowrap}
+.spec-case-table th:nth-child(5){width:240px}
+.spec-case-table th:nth-child(n+6){width:200px}
+.spec-case-table .button{white-space:normal;word-break:normal;overflow-wrap:normal}
+@media(max-width:600px){.spec-case-table{min-width:0;table-layout:auto}.spec-case-table td:nth-child(4){white-space:normal}}

@@ -55,6 +55,7 @@ export function installSpecUI({getState,getRole,save,render,modal,close,toast}){
     if(view!=='cases')return;
     $('#content [data-filter="queue"]')?.remove();
     const table=$('#content table');if(!table)return;
+    table.classList.add('spec-case-table');
     $('#content .filters').insertAdjacentHTML('beforeend',`<select id="specWorkFilter" aria-label="Текущая работа">${['','Сегодня','Просрочено','Запланировано','Следующий шаг не назначен','Завершено'].map(v=>`<option value="${esc(v)}" ${v===workFilter?'selected':''}>${v||'Любая текущая работа'}</option>`).join('')}</select>`);
     choices.clear();$('#content .table-frame').insertAdjacentHTML('beforebegin','<div class="selection-bar" id="specBulk"></div>');
     table.tHead.rows[0].insertAdjacentHTML('afterbegin','<th><input id="specSelectAll" type="checkbox" aria-label="Выбрать все дела стадии"></th>');table.tHead.rows[0].insertAdjacentHTML('beforeend','<th>Текущая работа</th>');

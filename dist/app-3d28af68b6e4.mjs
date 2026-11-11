@@ -2150,6 +2150,7 @@ function installSpecUI({ getState, getRole, save: save2, render: render2, modal:
     $3('#content [data-filter="queue"]')?.remove();
     const table = $3("#content table");
     if (!table) return;
+    table.classList.add("spec-case-table");
     $3("#content .filters").insertAdjacentHTML("beforeend", `<select id="specWorkFilter" aria-label="\u0422\u0435\u043A\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430">${["", "\u0421\u0435\u0433\u043E\u0434\u043D\u044F", "\u041F\u0440\u043E\u0441\u0440\u043E\u0447\u0435\u043D\u043E", "\u0417\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u043E", "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0448\u0430\u0433 \u043D\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D", "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E"].map((v) => `<option value="${esc(v)}" ${v === workFilter ? "selected" : ""}>${v || "\u041B\u044E\u0431\u0430\u044F \u0442\u0435\u043A\u0443\u0449\u0430\u044F \u0440\u0430\u0431\u043E\u0442\u0430"}</option>`).join("")}</select>`);
     choices.clear();
     $3("#content .table-frame").insertAdjacentHTML("beforebegin", '<div class="selection-bar" id="specBulk"></div>');
